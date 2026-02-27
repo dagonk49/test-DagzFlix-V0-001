@@ -52,7 +52,7 @@ def test_health_check():
 def test_setup_check_initial():
     """Test GET /api/setup/check - should return setupComplete: false initially"""
     try:
-        url = urljoin(BASE_URL, "setup/check")
+        url = f"{BASE_URL}/setup/check"
         print(f"Testing: GET {url}")
         
         response = requests.get(url, timeout=10)
@@ -113,7 +113,7 @@ def test_setup_save():
 def test_setup_check_after_save():
     """Test GET /api/setup/check after saving config - should return setupComplete: true"""
     try:
-        url = urljoin(BASE_URL, "setup/check")
+        url = f"{BASE_URL}/setup/check"
         print(f"Testing: GET {url} (after save)")
         
         response = requests.get(url, timeout=10)
