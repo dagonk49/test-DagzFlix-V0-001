@@ -8,7 +8,6 @@ Since no real Jellyfin server is available, tests focus on endpoints that work w
 import requests
 import json
 import sys
-from urllib.parse import urljoin
 
 # Base URL from environment
 BASE_URL = "https://dagzrank-preview.preview.emergentagent.com/api"
