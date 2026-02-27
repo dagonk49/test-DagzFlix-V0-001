@@ -229,7 +229,7 @@ def test_preferences_without_auth():
 def test_search_without_auth():
     """Test GET /api/search without authentication - should return 401"""
     try:
-        url = urljoin(BASE_URL, "search")
+        url = f"{BASE_URL}/search"
         print(f"Testing: GET {url}?q=test (without auth)")
         
         response = requests.get(url, params={'q': 'test'}, timeout=10)
