@@ -101,3 +101,184 @@
 #====================================================================================================
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
+
+user_problem_statement: "DagzFlix - Unified streaming platform that proxies Jellyfin and Jellyseerr APIs through a BFF pattern. Features: Setup wizard, Jellyfin auth, Netflix-like UI, Smart Button, DagzRank recommendation algorithm."
+
+backend:
+  - task: "Health check endpoint"
+    implemented: true
+    working: "NA"
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "GET /api/health should return status ok"
+
+  - task: "Setup check endpoint"
+    implemented: true
+    working: "NA"
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "GET /api/setup/check should return setupComplete status. Initially false."
+
+  - task: "Setup save endpoint"
+    implemented: true
+    working: "NA"
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "POST /api/setup/save stores Jellyfin/Jellyseerr config in MongoDB"
+
+  - task: "Auth session endpoint"
+    implemented: true
+    working: "NA"
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "GET /api/auth/session checks if user has valid session"
+
+  - task: "Preferences save endpoint"
+    implemented: true
+    working: "NA"
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "POST /api/preferences saves user genre preferences"
+
+  - task: "DagzRank recommendation algorithm"
+    implemented: true
+    working: "NA"
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "calculateDagzRank function scores media 0-100. GET /api/recommendations endpoint."
+
+  - task: "Smart Button status endpoint"
+    implemented: true
+    working: "NA"
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "GET /api/media/status checks Jellyfin availability and Jellyseerr status"
+
+  - task: "Image proxy endpoint"
+    implemented: true
+    working: "NA"
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "GET /api/proxy/image proxies Jellyfin images. GET /api/proxy/tmdb proxies TMDB images."
+
+frontend:
+  - task: "Setup wizard UI"
+    implemented: true
+    working: "NA"
+    file: "app/page.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "3-step setup wizard with Jellyfin/Jellyseerr config. Screenshot confirms it renders."
+
+  - task: "Login page UI"
+    implemented: true
+    working: "NA"
+    file: "app/page.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Login form with Jellyfin credentials"
+
+  - task: "Onboarding genre selection"
+    implemented: true
+    working: "NA"
+    file: "app/page.js"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Genre selection for DagzRank preferences"
+
+  - task: "Dashboard Netflix-like UI"
+    implemented: true
+    working: "NA"
+    file: "app/page.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Hero section, media rows with horizontal scrolling"
+
+  - task: "Smart Button component"
+    implemented: true
+    working: "NA"
+    file: "app/page.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Dynamic button: Play/Request/Pending based on availability"
+
+metadata:
+  created_by: "main_agent"
+  version: "1.0"
+  test_sequence: 1
+  run_ui: false
+
+test_plan:
+  current_focus:
+    - "Health check endpoint"
+    - "Setup check endpoint"
+    - "Setup save endpoint"
+    - "Auth session endpoint"
+    - "Preferences save endpoint"
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+  - agent: "main"
+    message: "DagzFlix MVP built. All API routes implemented in catch-all route handler. Frontend has setup wizard, login, onboarding, dashboard, detail, search views. The app proxies Jellyfin/Jellyseerr. Since no real Jellyfin server is available for testing, focus on testing: health, setup/check, setup/save, auth/session (unauthenticated), and preferences (without auth). The backend URL is https://dagzrank-preview.preview.emergentagent.com/api"
