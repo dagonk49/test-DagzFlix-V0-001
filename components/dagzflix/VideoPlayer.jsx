@@ -28,11 +28,61 @@ export function VideoPlayer({ item, episodeId, onClose }) {
   const videoRef = useRef(null);
   const ctrlTimer = useRef(null);
   const progressRef = useRef(null);
+  const playSessionIdRef = useRef('');
+  const progressIntervalRef = useRef(null);
+  const currentItemIdRef = useRef('');
 
   useEffect(() => {
     fetchStream();
-    return () => { if (ctrlTimer.current) clearTimeout(ctrlTimer.current); };
+    return () => {
+      if (ctrlTimer.current) clearTimeout(ctrlTimer.current);
+      if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
+      // Send stopped report on unmount
+      if (currentItemIdRef.current) {
+        sendProgressReport(true);
+      }
+    };
   }, []);
+
+  // BUG 2 FIX: Send progress report every 10 seconds while playing
+  useEffect(() => {
+    if (isPlaying) {
+      progressIntervalRef.current = setInterval(() => {
+        sendProgressReport(false);
+      }, 10000);
+    } else {
+      if (progressIntervalRef.current) {
+        clearInterval(progressIntervalRef.current);
+        progressIntervalRef.current = null;
+      }
+    }
+    return () => {
+      if (progressIntervalRef.current) {
+        clearInterval(progressIntervalRef.current);
+        progressIntervalRef.current = null;
+      }
+    };
+  }, [isPlaying]);
+
+  const sendProgressReport = async (isStopped = false) => {
+    const itemId = currentItemIdRef.current;
+    if (!itemId) return;
+    const positionTicks = videoRef.current
+      ? Math.round(videoRef.current.currentTime * 10000000)
+      : 0;
+    try {
+      await api('media/progress', {
+        method: 'POST',
+        body: JSON.stringify({
+          itemId,
+          positionTicks,
+          isPaused: videoRef.current ? videoRef.current.paused : true,
+          isStopped,
+          playSessionId: playSessionIdRef.current,
+        }),
+      });
+    } catch (e) { console.error('[DagzFlix] Progress report failed:', e.message); }
+  };
 
   const fetchStream = async () => {
     try {
@@ -44,6 +94,10 @@ export function VideoPlayer({ item, episodeId, onClose }) {
         setSubtitles(r.subtitles || []);
         setAudioTracks(r.audioTracks || []);
         if (r.duration) setDuration(r.duration);
+        playSessionIdRef.current = r.playSessionId || '';
+        currentItemIdRef.current = id;
+        // Send initial playback started report
+        setTimeout(() => sendProgressReport(false), 500);
       } else {
         setError(r.error || 'Stream indisponible');
       }
@@ -88,6 +142,7 @@ export function VideoPlayer({ item, episodeId, onClose }) {
             onPlay={() => setIsPlaying(true)}
             onPause={() => { setIsPlaying(false); setShowControls(true); }}
             onLoadedMetadata={(e) => setDuration(e.target.duration)}
+            onEnded={() => { setIsPlaying(false); sendProgressReport(true); }}
             onClick={togglePlay}
           >
             {subtitles.map((s, i) => <track key={i} kind="subtitles" src={s.url} srcLang={s.language} label={s.displayTitle} />)}
