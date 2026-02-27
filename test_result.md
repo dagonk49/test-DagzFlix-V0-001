@@ -341,7 +341,11 @@ metadata:
   run_ui: false
 
 test_plan:
-  current_focus: []
+  current_focus:
+    - "Series seasons endpoint"
+    - "Series episodes endpoint"
+    - "Trailer endpoint"
+    - "Collection/saga endpoint"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
@@ -351,3 +355,5 @@ agent_communication:
     message: "DagzFlix MVP built. All API routes implemented in catch-all route handler. Frontend has setup wizard, login, onboarding, dashboard, detail, search views. The app proxies Jellyfin/Jellyseerr. Since no real Jellyfin server is available for testing, focus on testing: health, setup/check, setup/save, auth/session (unauthenticated), and preferences (without auth). The backend URL is https://dagzrank-preview.preview.emergentagent.com/api"
   - agent: "testing"
     message: "✅ ALL BACKEND TESTS PASSED! Comprehensive testing completed on 10+ endpoints. All core functionality working: health checks, setup workflow, authentication, authorization, error handling, CORS, and 404 responses. The DagzFlix backend API is fully functional and ready for production use. Authentication properly protects all secure endpoints returning 401 as expected. Setup workflow saves configuration correctly to MongoDB."
+  - agent: "main"
+    message: "V2 update: Added 4 new endpoints - media/seasons, media/episodes, media/trailer, media/collection. All require auth (should return 401 without session). Also complete UI redesign with glassmorphism Apple TV style. Please test the 4 new endpoints - they all should return 401 since no session. Also test that /api/media/seasons without seriesId returns 400 (after auth). Backend URL is https://dagzrank-preview.preview.emergentagent.com/api"
