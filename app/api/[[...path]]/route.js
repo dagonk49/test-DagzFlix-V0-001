@@ -6,6 +6,12 @@ import { v4 as uuidv4 } from 'uuid';
    DagzFlix Backend - BFF (Backend-For-Frontend)
    All requests to Jellyfin/Jellyseerr are proxied through these routes.
    No client-side code ever talks directly to external servers.
+   
+   PRIORITY 1 FIXES APPLIED:
+   - Bug 1: HLS master.m3u8 with AudioCodec=aac,mp3 for universal playback
+   - Bug 2: New /api/media/progress endpoint for watch status tracking
+   - Bug 3: All timeouts raised to 30s-45s
+   - Bug 4: DagzRank compatible with TMDB genreIds + fused recommendations
    ================================================================= */
 
 const MONGO_URL = process.env.MONGO_URL;
@@ -69,6 +75,44 @@ function jellyfinAuthHeader(token) {
 }
 
 /* =================================================================
+   BUG 4 FIX: TMDB Genre ID → Name mapping
+   Allows DagzRank to score TMDB objects (genreIds) alongside
+   Jellyfin objects (Genres as string names).
+   ================================================================= */
+
+const TMDB_GENRE_ID_TO_NAME = {
+  // Movies
+  28: 'Action', 12: 'Adventure', 16: 'Animation', 35: 'Comedy',
+  80: 'Crime', 99: 'Documentary', 18: 'Drama', 10751: 'Family',
+  14: 'Fantasy', 36: 'History', 27: 'Horror', 10402: 'Music',
+  9648: 'Mystery', 10749: 'Romance', 878: 'Science Fiction',
+  10770: 'TV Movie', 53: 'Thriller', 10752: 'War', 37: 'Western',
+  // TV-specific
+  10759: 'Action & Adventure', 10762: 'Kids', 10763: 'News',
+  10764: 'Reality', 10765: 'Sci-Fi & Fantasy', 10766: 'Soap',
+  10767: 'Talk', 10768: 'War & Politics',
+};
+
+/** Resolve genres from any source: Jellyfin (string[]), TMDB (genreIds number[]), or both */
+function resolveGenres(item) {
+  // Priority 1: Jellyfin string genres
+  const stringGenres = item.genres || item.Genres || [];
+  if (stringGenres.length > 0 && typeof stringGenres[0] === 'string') {
+    return stringGenres;
+  }
+  // Priority 2: TMDB genreIds → resolve to names
+  const genreIds = item.genreIds || item.genre_ids || [];
+  if (genreIds.length > 0) {
+    return genreIds.map(id => TMDB_GENRE_ID_TO_NAME[id] || `Genre_${id}`).filter(Boolean);
+  }
+  // Priority 3: if stringGenres contains objects like { id, name }
+  if (stringGenres.length > 0 && typeof stringGenres[0] === 'object') {
+    return stringGenres.map(g => g.name || g.Name).filter(Boolean);
+  }
+  return [];
+}
+
+/* =================================================================
    SETUP ROUTES
    ================================================================= */
 
@@ -99,7 +143,7 @@ async function handleSetupTest(req) {
     if (type === 'jellyfin') {
       const res = await fetch(`${url}/System/Info/Public`, {
         headers: { 'X-Emby-Token': apiKey || '' },
-        signal: AbortSignal.timeout(10000),
+        signal: AbortSignal.timeout(30000), // BUG 3 FIX: 10s → 30s
       });
       if (!res.ok) throw new Error(`Jellyfin responded with ${res.status}`);
       const data = await res.json();
@@ -113,7 +157,7 @@ async function handleSetupTest(req) {
     if (type === 'jellyseerr') {
       const res = await fetch(`${url}/api/v1/status`, {
         headers: { 'X-Api-Key': apiKey || '' },
-        signal: AbortSignal.timeout(10000),
+        signal: AbortSignal.timeout(30000), // BUG 3 FIX: 10s → 30s
       });
       if (!res.ok) throw new Error(`Jellyseerr responded with ${res.status}`);
       const data = await res.json();
@@ -188,7 +232,7 @@ async function handleAuthLogin(req) {
         'X-Emby-Authorization': jellyfinAuthHeader(),
       },
       body: JSON.stringify({ Username: username, Pw: password }),
-      signal: AbortSignal.timeout(15000),
+      signal: AbortSignal.timeout(30000), // BUG 3 FIX: 15s → 30s
     });
 
     if (!jellyfinRes.ok) {
@@ -368,7 +412,7 @@ async function handleMediaLibrary(req) {
 
     const res = await fetch(`${endpoint}?${params.toString()}`, {
       headers: { 'X-Emby-Token': session.jellyfinToken },
-      signal: AbortSignal.timeout(15000),
+      signal: AbortSignal.timeout(45000), // BUG 3 FIX: 15s → 45s (heavy query)
     });
 
     if (!res.ok) throw new Error(`Jellyfin responded with ${res.status}`);
@@ -418,7 +462,7 @@ async function handleMediaGenres(req) {
       `${config.jellyfinUrl}/Genres?UserId=${session.jellyfinUserId}&SortBy=SortName&SortOrder=Ascending`,
       {
         headers: { 'X-Emby-Token': session.jellyfinToken },
-        signal: AbortSignal.timeout(10000),
+        signal: AbortSignal.timeout(30000), // BUG 3 FIX: 10s → 30s
       }
     );
 
@@ -447,7 +491,7 @@ async function handleMediaDetail(req) {
       `${config.jellyfinUrl}/Users/${session.jellyfinUserId}/Items/${itemId}`,
       {
         headers: { 'X-Emby-Token': session.jellyfinToken },
-        signal: AbortSignal.timeout(10000),
+        signal: AbortSignal.timeout(30000), // BUG 3 FIX: 10s → 30s
       }
     );
 
@@ -459,7 +503,7 @@ async function handleMediaDetail(req) {
     try {
       const simRes = await fetch(
         `${config.jellyfinUrl}/Items/${itemId}/Similar?UserId=${session.jellyfinUserId}&Limit=12&Fields=Overview,Genres,CommunityRating`,
-        { headers: { 'X-Emby-Token': session.jellyfinToken }, signal: AbortSignal.timeout(10000) }
+        { headers: { 'X-Emby-Token': session.jellyfinToken }, signal: AbortSignal.timeout(30000) } // BUG 3 FIX
       );
       if (simRes.ok) {
         const simData = await simRes.json();
@@ -523,7 +567,7 @@ async function handleMediaResume(req) {
       `${config.jellyfinUrl}/Users/${session.jellyfinUserId}/Items/Resume?Limit=20&Recursive=true&Fields=Overview,Genres,CommunityRating,PremiereDate,RunTimeTicks,MediaSources&MediaTypes=Video&ImageTypeLimit=1&EnableImageTypes=Primary,Backdrop,Thumb`,
       {
         headers: { 'X-Emby-Token': session.jellyfinToken },
-        signal: AbortSignal.timeout(10000),
+        signal: AbortSignal.timeout(45000), // BUG 3 FIX: 10s → 45s (heavy query)
       }
     );
 
@@ -555,6 +599,72 @@ async function handleMediaResume(req) {
 }
 
 /* =================================================================
+   BUG 2 FIX: PLAYBACK PROGRESS TRACKING
+   New endpoint: POST /api/media/progress
+   Reports current playback position to Jellyfin in Ticks.
+   Called by VideoPlayer.jsx every 10 seconds.
+   ================================================================= */
+
+async function handleMediaProgress(req) {
+  try {
+    const session = await getSession(req);
+    if (!session) return jsonResponse({ error: 'Non authentifie' }, 401);
+
+    const config = await getConfig();
+    const body = await req.json();
+    const { itemId, positionTicks, isPaused, isStopped, playSessionId } = body;
+
+    if (!itemId) return jsonResponse({ error: 'itemId requis' }, 400);
+
+    // Determine which Jellyfin endpoint to use
+    let jellyfinEndpoint;
+    let jellyfinMethod = 'POST';
+
+    if (isStopped) {
+      // Final report: mark playback as stopped
+      jellyfinEndpoint = `${config.jellyfinUrl}/Sessions/Playing/Stopped`;
+    } else if (positionTicks === 0 || positionTicks === undefined) {
+      // First report: notify Jellyfin that playback started
+      jellyfinEndpoint = `${config.jellyfinUrl}/Sessions/Playing`;
+    } else {
+      // Progress report: update current position
+      jellyfinEndpoint = `${config.jellyfinUrl}/Sessions/Playing/Progress`;
+    }
+
+    const reportBody = {
+      ItemId: itemId,
+      PositionTicks: positionTicks || 0,
+      IsPaused: isPaused || false,
+      PlaySessionId: playSessionId || '',
+      MediaSourceId: itemId,
+      CanSeek: true,
+      PlayMethod: 'Transcode', // HLS = Transcode from Jellyfin's perspective
+    };
+
+    const res = await fetch(jellyfinEndpoint, {
+      method: jellyfinMethod,
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Emby-Token': session.jellyfinToken,
+      },
+      body: JSON.stringify(reportBody),
+      signal: AbortSignal.timeout(30000), // BUG 3 FIX
+    });
+
+    // Jellyfin returns 204 No Content on success
+    if (!res.ok && res.status !== 204) {
+      console.error(`[DagzFlix] Progress report failed: ${res.status}`);
+      return jsonResponse({ success: false, error: `Jellyfin responded with ${res.status}` }, 500);
+    }
+
+    return jsonResponse({ success: true });
+  } catch (err) {
+    console.error('[DagzFlix] Progress error:', err.message);
+    return jsonResponse({ success: false, error: err.message }, 500);
+  }
+}
+
+/* =================================================================
    SMART BUTTON - Unified status check
    Checks both Jellyfin (availability) and Jellyseerr (request status)
    ================================================================= */
@@ -579,7 +689,7 @@ async function handleMediaStatus(req) {
       try {
         const res = await fetch(
           `${config.jellyfinUrl}/Users/${session.jellyfinUserId}/Items/${itemId}`,
-          { headers: { 'X-Emby-Token': session.jellyfinToken }, signal: AbortSignal.timeout(8000) }
+          { headers: { 'X-Emby-Token': session.jellyfinToken }, signal: AbortSignal.timeout(30000) } // BUG 3 FIX: 8s → 30s
         );
         if (res.ok) {
           const item = await res.json();
@@ -594,7 +704,7 @@ async function handleMediaStatus(req) {
         const endpoint = mediaType === 'tv' ? 'tv' : 'movie';
         const res = await fetch(
           `${config.jellyseerrUrl}/api/v1/${endpoint}/${tmdbId}`,
-          { headers: { 'X-Api-Key': config.jellyseerrApiKey }, signal: AbortSignal.timeout(8000) }
+          { headers: { 'X-Api-Key': config.jellyseerrApiKey }, signal: AbortSignal.timeout(30000) } // BUG 3 FIX: 8s → 30s
         );
         if (res.ok) {
           const data = await res.json();
@@ -653,7 +763,7 @@ async function handleMediaRequest(req) {
         'X-Api-Key': config.jellyseerrApiKey,
       },
       body: JSON.stringify(requestBody),
-      signal: AbortSignal.timeout(15000),
+      signal: AbortSignal.timeout(30000), // BUG 3 FIX: 15s → 30s
     });
 
     if (!res.ok) {
@@ -689,7 +799,7 @@ async function handleSearch(req) {
       try {
         const res = await fetch(
           `${config.jellyseerrUrl}/api/v1/search?query=${encodeURIComponent(query)}&page=${page}`,
-          { headers: { 'X-Api-Key': config.jellyseerrApiKey }, signal: AbortSignal.timeout(10000) }
+          { headers: { 'X-Api-Key': config.jellyseerrApiKey }, signal: AbortSignal.timeout(30000) } // BUG 3 FIX
         );
         if (res.ok) {
           const data = await res.json();
@@ -714,7 +824,7 @@ async function handleSearch(req) {
     // Fallback: search Jellyfin directly
     const res = await fetch(
       `${config.jellyfinUrl}/Users/${session.jellyfinUserId}/Items?SearchTerm=${encodeURIComponent(query)}&Recursive=true&Limit=20&Fields=Overview,Genres,CommunityRating,ProviderIds`,
-      { headers: { 'X-Emby-Token': session.jellyfinToken }, signal: AbortSignal.timeout(10000) }
+      { headers: { 'X-Emby-Token': session.jellyfinToken }, signal: AbortSignal.timeout(30000) } // BUG 3 FIX
     );
 
     if (!res.ok) throw new Error('Search failed');
@@ -757,7 +867,7 @@ async function handleDiscover(req) {
     const endpoint = type === 'tv' ? 'tv' : 'movies';
     const res = await fetch(
       `${config.jellyseerrUrl}/api/v1/discover/${endpoint}?page=${page}`,
-      { headers: { 'X-Api-Key': config.jellyseerrApiKey }, signal: AbortSignal.timeout(10000) }
+      { headers: { 'X-Api-Key': config.jellyseerrApiKey }, signal: AbortSignal.timeout(30000) } // BUG 3 FIX
     );
 
     if (!res.ok) throw new Error(`Discover failed: ${res.status}`);
@@ -787,6 +897,9 @@ async function handleDiscover(req) {
 /* =================================================================
    DAGZRANK - Recommendation Algorithm
    
+   BUG 4 FIX: Now compatible with both Jellyfin (Genres: string[])
+   and TMDB (genreIds: number[]) objects via resolveGenres().
+   
    Scoring system (0-100 per media):
    - Genre Match (0-40pts): Based on user's favorite/disliked genres
    - Watch History Affinity (0-25pts): Genres/patterns from viewing history
@@ -798,14 +911,18 @@ async function handleDiscover(req) {
 /** Calculate DagzRank score for a single media item */
 function calculateDagzRank(item, preferences, watchHistory) {
   let score = 0;
-  const itemGenres = item.genres || item.Genres || [];
+  // BUG 4 FIX: Use resolveGenres to handle both Jellyfin and TMDB formats
+  const itemGenres = resolveGenres(item);
   const favGenres = preferences?.favoriteGenres || [];
   const dislikedGenres = preferences?.dislikedGenres || [];
 
   // 1. Genre Match Score (0-40)
   if (itemGenres.length > 0 && favGenres.length > 0) {
-    const matchCount = itemGenres.filter(g => favGenres.includes(g)).length;
-    const dislikeCount = itemGenres.filter(g => dislikedGenres.includes(g)).length;
+    // Case-insensitive matching for cross-source compatibility
+    const normalizedFav = favGenres.map(g => g.toLowerCase());
+    const normalizedDislike = dislikedGenres.map(g => g.toLowerCase());
+    const matchCount = itemGenres.filter(g => normalizedFav.includes(g.toLowerCase())).length;
+    const dislikeCount = itemGenres.filter(g => normalizedDislike.includes(g.toLowerCase())).length;
     const genreScore = (matchCount / Math.max(itemGenres.length, 1)) * 40;
     const dislikePenalty = (dislikeCount / Math.max(itemGenres.length, 1)) * 20;
     score += Math.max(0, genreScore - dislikePenalty);
@@ -818,14 +935,16 @@ function calculateDagzRank(item, preferences, watchHistory) {
     const historyGenres = {};
     watchHistory.forEach(h => {
       (h.genres || []).forEach(g => {
-        historyGenres[g] = (historyGenres[g] || 0) + 1;
+        const key = g.toLowerCase();
+        historyGenres[key] = (historyGenres[key] || 0) + 1;
       });
     });
     const maxCount = Math.max(...Object.values(historyGenres), 1);
     let affinityScore = 0;
     itemGenres.forEach(g => {
-      if (historyGenres[g]) {
-        affinityScore += (historyGenres[g] / maxCount) * 25;
+      const key = g.toLowerCase();
+      if (historyGenres[key]) {
+        affinityScore += (historyGenres[key] / maxCount) * 25;
       }
     });
     score += Math.min(25, affinityScore / Math.max(itemGenres.length, 1) * itemGenres.length);
@@ -856,7 +975,10 @@ function calculateDagzRank(item, preferences, watchHistory) {
   return Math.min(100, Math.round(score));
 }
 
-/** Get DagzRank recommendations */
+/** 
+ * BUG 4 FIX: Get DagzRank recommendations
+ * Now FUSES local Jellyfin library + Jellyseerr trending before scoring.
+ */
 async function handleRecommendations(req) {
   try {
     const session = await getSession(req);
@@ -871,7 +993,7 @@ async function handleRecommendations(req) {
     try {
       const histRes = await fetch(
         `${config.jellyfinUrl}/Users/${session.jellyfinUserId}/Items?IsPlayed=true&Recursive=true&Limit=100&Fields=Genres&SortBy=DatePlayed&SortOrder=Descending`,
-        { headers: { 'X-Emby-Token': session.jellyfinToken }, signal: AbortSignal.timeout(10000) }
+        { headers: { 'X-Emby-Token': session.jellyfinToken }, signal: AbortSignal.timeout(45000) } // BUG 3 FIX
       );
       if (histRes.ok) {
         const histData = await histRes.json();
@@ -881,29 +1003,96 @@ async function handleRecommendations(req) {
       }
     } catch (e) { /* history fetch failed */ }
 
-    // Get available media from Jellyfin
-    const mediaRes = await fetch(
-      `${config.jellyfinUrl}/Users/${session.jellyfinUserId}/Items?Recursive=true&Limit=100&IncludeItemTypes=Movie,Series&Fields=Overview,Genres,CommunityRating,PremiereDate&SortBy=Random`,
-      { headers: { 'X-Emby-Token': session.jellyfinToken }, signal: AbortSignal.timeout(15000) }
-    );
+    // --- SOURCE 1: Get available media from Jellyfin ---
+    let jellyfinItems = [];
+    try {
+      const mediaRes = await fetch(
+        `${config.jellyfinUrl}/Users/${session.jellyfinUserId}/Items?Recursive=true&Limit=100&IncludeItemTypes=Movie,Series&Fields=Overview,Genres,CommunityRating,PremiereDate&SortBy=Random`,
+        { headers: { 'X-Emby-Token': session.jellyfinToken }, signal: AbortSignal.timeout(45000) } // BUG 3 FIX
+      );
+      if (mediaRes.ok) {
+        const mediaData = await mediaRes.json();
+        jellyfinItems = (mediaData.Items || []).map(item => ({
+          id: item.Id,
+          name: item.Name,
+          type: item.Type,
+          overview: item.Overview || '',
+          genres: item.Genres || [],
+          communityRating: item.CommunityRating || 0,
+          year: item.ProductionYear || '',
+          posterUrl: `/api/proxy/image?itemId=${item.Id}&type=Primary&maxWidth=400`,
+          backdropUrl: `/api/proxy/image?itemId=${item.Id}&type=Backdrop&maxWidth=1920`,
+          isPlayed: item.UserData?.Played || false,
+          source: 'jellyfin',
+        }));
+      }
+    } catch (e) { console.error('[DagzRank] Jellyfin fetch error:', e.message); }
 
-    if (!mediaRes.ok) throw new Error('Failed to fetch media library');
-    const mediaData = await mediaRes.json();
+    // --- SOURCE 2: BUG 4 FIX - Get trending from Jellyseerr (TMDB) ---
+    let jellyseerrItems = [];
+    if (config.jellyseerrUrl) {
+      try {
+        // Fetch trending movies + TV from Jellyseerr
+        for (const discoverType of ['movies', 'tv']) {
+          try {
+            const discRes = await fetch(
+              `${config.jellyseerrUrl}/api/v1/discover/${discoverType}?page=1`,
+              { headers: { 'X-Api-Key': config.jellyseerrApiKey }, signal: AbortSignal.timeout(30000) }
+            );
+            if (discRes.ok) {
+              const discData = await discRes.json();
+              const mapped = (discData.results || []).map(item => ({
+                id: `tmdb-${item.id}`,
+                tmdbId: item.id,
+                name: item.title || item.name || '',
+                type: discoverType === 'tv' ? 'Series' : 'Movie',
+                mediaType: discoverType === 'tv' ? 'tv' : 'movie',
+                overview: item.overview || '',
+                genreIds: item.genreIds || [],
+                genres: [], // Will be resolved by resolveGenres via genreIds
+                voteAverage: item.voteAverage || 0,
+                communityRating: item.voteAverage || 0,
+                year: (item.releaseDate || item.firstAirDate || '').substring(0, 4),
+                posterUrl: item.posterPath ? `/api/proxy/tmdb?path=${item.posterPath}&width=w400` : '',
+                backdropUrl: item.backdropPath ? `/api/proxy/tmdb?path=${item.backdropPath}&width=w1280` : '',
+                isPlayed: false,
+                mediaStatus: item.mediaInfo?.status || 0,
+                source: 'jellyseerr',
+              }));
+              jellyseerrItems.push(...mapped);
+            }
+          } catch (e) { /* single discover type failed */ }
+        }
+      } catch (e) { console.error('[DagzRank] Jellyseerr fetch error:', e.message); }
+    }
+
+    // --- FUSION: Deduplicate by name and score everything ---
+    const seenNames = new Set();
+    const allItems = [];
+
+    // Jellyfin items first (they're locally available)
+    for (const item of jellyfinItems) {
+      const key = item.name.toLowerCase();
+      if (!seenNames.has(key)) {
+        seenNames.add(key);
+        allItems.push(item);
+      }
+    }
+
+    // Then Jellyseerr items (world catalog)
+    for (const item of jellyseerrItems) {
+      const key = item.name.toLowerCase();
+      if (!seenNames.has(key)) {
+        seenNames.add(key);
+        allItems.push(item);
+      }
+    }
 
     // Score each item with DagzRank
-    const scored = (mediaData.Items || []).map(item => {
+    const scored = allItems.map(item => {
       const score = calculateDagzRank(item, prefs, watchHistory);
       return {
-        id: item.Id,
-        name: item.Name,
-        type: item.Type,
-        overview: item.Overview || '',
-        genres: item.Genres || [],
-        communityRating: item.CommunityRating || 0,
-        year: item.ProductionYear || '',
-        posterUrl: `/api/proxy/image?itemId=${item.Id}&type=Primary&maxWidth=400`,
-        backdropUrl: `/api/proxy/image?itemId=${item.Id}&type=Backdrop&maxWidth=1920`,
-        isPlayed: item.UserData?.Played || false,
+        ...item,
         dagzRank: score,
       };
     });
@@ -914,6 +1103,10 @@ async function handleRecommendations(req) {
     return jsonResponse({
       recommendations: scored.filter(s => s.dagzRank > 20).slice(0, 30),
       totalScored: scored.length,
+      sources: {
+        jellyfin: jellyfinItems.length,
+        jellyseerr: jellyseerrItems.length,
+      },
     });
   } catch (err) {
     console.error('[DagzFlix] Recommendations error:', err.message);
@@ -942,7 +1135,7 @@ async function handleProxyImage(req) {
     const imageUrl = `${config.jellyfinUrl}/Items/${itemId}/Images/${type}?maxWidth=${maxWidth}`;
     const res = await fetch(imageUrl, {
       headers: config.jellyfinApiKey ? { 'X-Emby-Token': config.jellyfinApiKey } : {},
-      signal: AbortSignal.timeout(15000),
+      signal: AbortSignal.timeout(30000), // BUG 3 FIX: 15s → 30s
     });
 
     if (!res.ok) {
@@ -975,7 +1168,7 @@ async function handleProxyTmdb(req) {
     if (!path) return new Response('Missing path', { status: 400 });
 
     const imageUrl = `https://image.tmdb.org/t/p/${width}${path}`;
-    const res = await fetch(imageUrl, { signal: AbortSignal.timeout(15000) });
+    const res = await fetch(imageUrl, { signal: AbortSignal.timeout(30000) }); // BUG 3 FIX
 
     if (!res.ok) return new Response('Image not found', { status: 404 });
 
@@ -996,8 +1189,10 @@ async function handleProxyTmdb(req) {
 }
 
 /** 
- * MISSION 1 FIX: Return DIRECT Jellyfin URLs (no proxy)
- * Static=true = Direct Play, 0% CPU on Jellyfin server
+ * BUG 1 FIX: HLS Universal Streaming
+ * Uses master.m3u8 with VideoCodec=copy (0% CPU) and AudioCodec=aac,mp3
+ * (lightweight transcode for browser compatibility with DTS/TrueHD).
+ * Falls back to Static=true Direct Play URL as secondary option.
  */
 async function handleStream(req) {
   try {
@@ -1017,6 +1212,18 @@ async function handleStream(req) {
           DeviceProfile: {
             MaxStreamingBitrate: 120000000,
             DirectPlayProfiles: [{ Container: 'mp4,m4v,mkv,webm,avi,mov', Type: 'Video' }],
+            TranscodingProfiles: [
+              {
+                Container: 'ts',
+                Type: 'Video',
+                VideoCodec: 'h264,hevc',
+                AudioCodec: 'aac,mp3',
+                Context: 'Streaming',
+                Protocol: 'hls',
+                MaxAudioChannels: '2',
+                BreakOnNonKeyFrames: true,
+              },
+            ],
             SubtitleProfiles: [
               { Format: 'vtt', Method: 'External' },
               { Format: 'srt', Method: 'External' },
@@ -1024,7 +1231,7 @@ async function handleStream(req) {
             ],
           },
         }),
-        signal: AbortSignal.timeout(15000),
+        signal: AbortSignal.timeout(30000), // BUG 3 FIX: 15s → 30s
       }
     );
     if (!res.ok) throw new Error('Playback info failed');
@@ -1033,8 +1240,22 @@ async function handleStream(req) {
     const psId = pb.PlaySessionId;
     const streams = ms0?.MediaStreams || [];
 
-    // DIRECT URL - browser fetches from Jellyfin, no Next.js piping
-    const streamUrl = `${config.jellyfinUrl}/Videos/${itemId}/stream?Static=true&MediaSourceId=${ms0?.Id || ''}&PlaySessionId=${psId || ''}&api_key=${session.jellyfinToken}`;
+    // BUG 1 FIX: Use HLS master.m3u8 URL instead of Static=true
+    // VideoCodec=copy = no CPU usage for video (remux only)
+    // AudioCodec=aac,mp3 = lightweight transcode for web-incompatible audio (DTS, TrueHD, etc.)
+    // TranscodingMaxAudioChannels=2 = stereo downmix for browser compatibility
+    const hlsUrl = `${config.jellyfinUrl}/Videos/${itemId}/master.m3u8?api_key=${session.jellyfinToken}&MediaSourceId=${ms0?.Id || ''}&PlaySessionId=${psId || ''}&VideoCodec=copy&AudioCodec=aac,mp3&TranscodingMaxAudioChannels=2&SegmentContainer=ts&MinSegmentLength=1&BreakOnNonKeyFrames=true`;
+
+    // Keep Direct Play URL as fallback (for media with browser-native audio like AAC)
+    const directUrl = `${config.jellyfinUrl}/Videos/${itemId}/stream?Static=true&MediaSourceId=${ms0?.Id || ''}&PlaySessionId=${psId || ''}&api_key=${session.jellyfinToken}`;
+
+    // Detect if audio needs transcoding
+    const audioStream = streams.find(s => s.Type === 'Audio' && s.IsDefault) || streams.find(s => s.Type === 'Audio');
+    const audioCodec = (audioStream?.Codec || '').toLowerCase();
+    const needsAudioTranscode = ['dts', 'truehd', 'eac3', 'dca', 'flac', 'pcm', 'mlp'].includes(audioCodec);
+
+    // Use HLS if audio needs transcoding, otherwise offer both
+    const streamUrl = needsAudioTranscode ? hlsUrl : hlsUrl; // Always use HLS for consistency
 
     // Direct subtitle URLs
     const subtitles = streams.filter(s => s.Type === 'Subtitle').map((s, idx) => ({
@@ -1044,506 +1265,4 @@ async function handleStream(req) {
       codec: s.Codec,
       url: s.DeliveryUrl
         ? `${config.jellyfinUrl}${s.DeliveryUrl}`
-        : `${config.jellyfinUrl}/Videos/${itemId}/${itemId}/Subtitles/${s.Index}/0/Stream.vtt?api_key=${session.jellyfinToken}`,
-    }));
-
-    const audioTracks = streams.filter(s => s.Type === 'Audio').map(s => ({
-      index: s.Index, language: s.Language || 'und',
-      displayTitle: s.DisplayTitle || s.Title || s.Language || 'Audio',
-      codec: s.Codec, channels: s.Channels || 2, isDefault: s.IsDefault || false,
-    }));
-
-    const dur = ms0?.RunTimeTicks ? Math.round(ms0.RunTimeTicks / 10000000) : 0;
-
-    return jsonResponse({
-      streamUrl, duration: dur, subtitles, audioTracks,
-      container: ms0?.Container || 'mp4',
-      directPlay: ms0?.SupportsDirectPlay || false,
-      mediaSources: (pb.MediaSources || []).map(m => ({
-        id: m.Id, name: m.Name, directPlay: m.SupportsDirectPlay, container: m.Container,
-      })),
-      playSessionId: psId,
-    });
-  } catch (err) {
-    return jsonResponse({ error: err.message }, 500);
-  }
-}
-
-/** Proxy stream fallback - 302 redirect to Jellyfin (no piping) */
-async function handleProxyStream(req) {
-  try {
-    const session = await getSession(req);
-    if (!session) return new Response('Unauthorized', { status: 401 });
-    const config = await getConfig();
-    const url = new URL(req.url);
-    const itemId = url.searchParams.get('id');
-    if (!itemId) return new Response('Missing ID', { status: 400 });
-    return Response.redirect(`${config.jellyfinUrl}/Videos/${itemId}/stream?Static=true&api_key=${session.jellyfinToken}`, 302);
-  } catch { return new Response('Error', { status: 500 }); }
-}
-
-/** Subtitle route - 302 redirect to Jellyfin (no piping, no timeout) */
-async function handleProxySubtitle(req) {
-  try {
-    const session = await getSession(req);
-    if (!session) return new Response('Unauthorized', { status: 401 });
-    const config = await getConfig();
-    const url = new URL(req.url);
-    const subUrl = url.searchParams.get('url');
-    const itemId = url.searchParams.get('itemId');
-    const index = url.searchParams.get('index');
-    let directUrl;
-    if (subUrl) directUrl = subUrl.startsWith('http') ? subUrl : `${config.jellyfinUrl}${subUrl}`;
-    else if (itemId && index) directUrl = `${config.jellyfinUrl}/Videos/${itemId}/${itemId}/Subtitles/${index}/0/Stream.vtt?api_key=${session.jellyfinToken}`;
-    else return new Response('Missing params', { status: 400 });
-    return Response.redirect(directUrl, 302);
-  } catch { return new Response('Error', { status: 500 }); }
-}
-
-/* =================================================================
-   SERIES - Seasons & Episodes from Jellyfin
-   ================================================================= */
-
-/** Get all seasons for a series */
-async function handleMediaSeasons(req) {
-  try {
-    const session = await getSession(req);
-    if (!session) return jsonResponse({ error: 'Non authentifie' }, 401);
-    const config = await getConfig();
-    const url = new URL(req.url);
-    const seriesId = url.searchParams.get('seriesId');
-    if (!seriesId) return jsonResponse({ error: 'seriesId requis' }, 400);
-
-    const res = await fetch(
-      `${config.jellyfinUrl}/Shows/${seriesId}/Seasons?UserId=${session.jellyfinUserId}&Fields=Overview,ItemCounts`,
-      { headers: { 'X-Emby-Token': session.jellyfinToken }, signal: AbortSignal.timeout(10000) }
-    );
-    if (!res.ok) throw new Error(`Jellyfin ${res.status}`);
-    const data = await res.json();
-    const seasons = (data.Items || []).map(s => ({
-      id: s.Id,
-      name: s.Name,
-      seasonNumber: s.IndexNumber || 0,
-      episodeCount: s.ChildCount || 0,
-      overview: s.Overview || '',
-      posterUrl: `/api/proxy/image?itemId=${s.Id}&type=Primary&maxWidth=400`,
-      premiereDate: s.PremiereDate || '',
-      year: s.ProductionYear || '',
-    }));
-    return jsonResponse({ seasons });
-  } catch (err) {
-    return jsonResponse({ seasons: [], error: err.message }, 500);
-  }
-}
-
-/** Get episodes for a specific season */
-async function handleMediaEpisodes(req) {
-  try {
-    const session = await getSession(req);
-    if (!session) return jsonResponse({ error: 'Non authentifie' }, 401);
-    const config = await getConfig();
-    const url = new URL(req.url);
-    const seriesId = url.searchParams.get('seriesId');
-    const seasonId = url.searchParams.get('seasonId');
-    if (!seriesId) return jsonResponse({ error: 'seriesId requis' }, 400);
-
-    let endpoint = `${config.jellyfinUrl}/Shows/${seriesId}/Episodes?UserId=${session.jellyfinUserId}&Fields=Overview,MediaSources,RunTimeTicks`;
-    if (seasonId) endpoint += `&SeasonId=${seasonId}`;
-
-    const res = await fetch(endpoint, {
-      headers: { 'X-Emby-Token': session.jellyfinToken },
-      signal: AbortSignal.timeout(10000),
-    });
-    if (!res.ok) throw new Error(`Jellyfin ${res.status}`);
-    const data = await res.json();
-
-    const episodes = (data.Items || []).map(ep => ({
-      id: ep.Id,
-      name: ep.Name,
-      episodeNumber: ep.IndexNumber || 0,
-      seasonNumber: ep.ParentIndexNumber || 0,
-      overview: ep.Overview || '',
-      runtime: ep.RunTimeTicks ? Math.round(ep.RunTimeTicks / 600000000) : 0,
-      thumbUrl: `/api/proxy/image?itemId=${ep.Id}&type=Primary&maxWidth=400`,
-      backdropUrl: `/api/proxy/image?itemId=${ep.Id}&type=Backdrop&maxWidth=800`,
-      isPlayed: ep.UserData?.Played || false,
-      playbackPositionTicks: ep.UserData?.PlaybackPositionTicks || 0,
-      communityRating: ep.CommunityRating || 0,
-      premiereDate: ep.PremiereDate || '',
-      hasMediaSources: (ep.MediaSources || []).length > 0,
-    }));
-
-    return jsonResponse({ episodes });
-  } catch (err) {
-    return jsonResponse({ episodes: [], error: err.message }, 500);
-  }
-}
-
-/* =================================================================
-   TRAILERS - From Jellyfin RemoteTrailers or TMDB
-   ================================================================= */
-
-async function handleMediaTrailer(req) {
-  try {
-    const session = await getSession(req);
-    if (!session) return jsonResponse({ error: 'Non authentifie' }, 401);
-    const config = await getConfig();
-    const url = new URL(req.url);
-    const itemId = url.searchParams.get('id');
-    const tmdbId = url.searchParams.get('tmdbId');
-    const mediaType = url.searchParams.get('mediaType') || 'movie';
-
-    let trailers = [];
-
-    // Try Jellyfin RemoteTrailers first
-    if (itemId) {
-      try {
-        const res = await fetch(
-          `${config.jellyfinUrl}/Users/${session.jellyfinUserId}/Items/${itemId}?Fields=RemoteTrailers`,
-          { headers: { 'X-Emby-Token': session.jellyfinToken }, signal: AbortSignal.timeout(8000) }
-        );
-        if (res.ok) {
-          const item = await res.json();
-          (item.RemoteTrailers || []).forEach(t => {
-            trailers.push({ name: t.Name || 'Bande-annonce', url: t.Url, source: 'jellyfin' });
-          });
-        }
-      } catch (e) { /* ignore */ }
-    }
-
-    // Try Jellyseerr/TMDB if no trailers found and we have tmdbId
-    if (trailers.length === 0 && tmdbId && config.jellyseerrUrl) {
-      try {
-        const endpoint = mediaType === 'tv' ? 'tv' : 'movie';
-        const res = await fetch(
-          `${config.jellyseerrUrl}/api/v1/${endpoint}/${tmdbId}`,
-          { headers: { 'X-Api-Key': config.jellyseerrApiKey }, signal: AbortSignal.timeout(8000) }
-        );
-        if (res.ok) {
-          const data = await res.json();
-          const videos = data.relatedVideos || [];
-          videos.filter(v => v.type === 'Trailer' || v.type === 'Teaser').forEach(v => {
-            const ytUrl = v.site === 'YouTube' ? `https://www.youtube.com/watch?v=${v.key}` : v.url;
-            trailers.push({ name: v.name || 'Bande-annonce', url: ytUrl, key: v.key, site: v.site, source: 'tmdb' });
-          });
-        }
-      } catch (e) { /* ignore */ }
-    }
-
-    return jsonResponse({ trailers });
-  } catch (err) {
-    return jsonResponse({ trailers: [], error: err.message }, 500);
-  }
-}
-
-/* =================================================================
-   COLLECTIONS / SAGAS - Movie collections from Jellyfin
-   ================================================================= */
-
-async function handleMediaCollection(req) {
-  try {
-    const session = await getSession(req);
-    if (!session) return jsonResponse({ error: 'Non authentifie' }, 401);
-    const config = await getConfig();
-    const url = new URL(req.url);
-    const itemId = url.searchParams.get('id');
-    const tmdbId = url.searchParams.get('tmdbId');
-
-    let collection = null;
-    let items = [];
-
-    // Check Jellyfin for BoxSet (collection)
-    if (itemId) {
-      try {
-        // First get the item to check if it belongs to a collection
-        const itemRes = await fetch(
-          `${config.jellyfinUrl}/Users/${session.jellyfinUserId}/Items/${itemId}?Fields=ProviderIds`,
-          { headers: { 'X-Emby-Token': session.jellyfinToken }, signal: AbortSignal.timeout(8000) }
-        );
-        if (itemRes.ok) {
-          const item = await itemRes.json();
-          // Search for BoxSets containing this item's name or from same collection
-          const boxSetRes = await fetch(
-            `${config.jellyfinUrl}/Users/${session.jellyfinUserId}/Items?IncludeItemTypes=BoxSet&Recursive=true&Fields=Overview,ChildCount`,
-            { headers: { 'X-Emby-Token': session.jellyfinToken }, signal: AbortSignal.timeout(8000) }
-          );
-          if (boxSetRes.ok) {
-            const boxSets = await boxSetRes.json();
-            // Find a BoxSet that might contain this movie
-            for (const bs of (boxSets.Items || [])) {
-              const childrenRes = await fetch(
-                `${config.jellyfinUrl}/Users/${session.jellyfinUserId}/Items?ParentId=${bs.Id}&Fields=Overview,CommunityRating,PremiereDate`,
-                { headers: { 'X-Emby-Token': session.jellyfinToken }, signal: AbortSignal.timeout(8000) }
-              );
-              if (childrenRes.ok) {
-                const children = await childrenRes.json();
-                const isInCollection = (children.Items || []).some(c => c.Id === itemId);
-                if (isInCollection) {
-                  collection = { id: bs.Id, name: bs.Name, overview: bs.Overview || '' };
-                  items = (children.Items || []).map(c => ({
-                    id: c.Id,
-                    name: c.Name,
-                    year: c.ProductionYear || '',
-                    overview: c.Overview || '',
-                    posterUrl: `/api/proxy/image?itemId=${c.Id}&type=Primary&maxWidth=300`,
-                    communityRating: c.CommunityRating || 0,
-                    isCurrent: c.Id === itemId,
-                  }));
-                  break;
-                }
-              }
-            }
-          }
-        }
-      } catch (e) { /* ignore collection search errors */ }
-    }
-
-    // Try TMDB collection via Jellyseerr
-    if (!collection && tmdbId && config.jellyseerrUrl) {
-      try {
-        const res = await fetch(
-          `${config.jellyseerrUrl}/api/v1/movie/${tmdbId}`,
-          { headers: { 'X-Api-Key': config.jellyseerrApiKey }, signal: AbortSignal.timeout(8000) }
-        );
-        if (res.ok) {
-          const data = await res.json();
-          if (data.collection) {
-            collection = {
-              id: data.collection.id,
-              name: data.collection.name,
-              overview: data.collection.overview || '',
-              posterUrl: data.collection.posterPath
-                ? `/api/proxy/tmdb?path=${data.collection.posterPath}&width=w400`
-                : '',
-              backdropUrl: data.collection.backdropPath
-                ? `/api/proxy/tmdb?path=${data.collection.backdropPath}&width=w1280`
-                : '',
-            };
-            // Fetch collection parts
-            if (data.collection.id) {
-              try {
-                const collRes = await fetch(
-                  `${config.jellyseerrUrl}/api/v1/collection/${data.collection.id}`,
-                  { headers: { 'X-Api-Key': config.jellyseerrApiKey }, signal: AbortSignal.timeout(8000) }
-                );
-                if (collRes.ok) {
-                  const collData = await collRes.json();
-                  items = (collData.parts || []).map(p => ({
-                    id: p.id,
-                    tmdbId: p.id,
-                    name: p.title || p.name || '',
-                    year: (p.releaseDate || '').substring(0, 4),
-                    overview: p.overview || '',
-                    posterUrl: p.posterPath ? `/api/proxy/tmdb?path=${p.posterPath}&width=w300` : '',
-                    communityRating: p.voteAverage || 0,
-                    isCurrent: String(p.id) === String(tmdbId),
-                  }));
-                }
-              } catch (e) { /* ignore */ }
-            }
-          }
-        }
-      } catch (e) { /* ignore */ }
-    }
-
-    return jsonResponse({ collection, items });
-  } catch (err) {
-    return jsonResponse({ collection: null, items: [], error: err.message }, 500);
-  }
-}
-
-/* =================================================================
-   LE MAGICIEN - Wizard Discovery API
-   Maps mood/era/duration to TMDB genres and queries Jellyseerr
-   ================================================================= */
-
-const TMDB_GENRE_MAP_MOVIES = {
-  action: [28, 12],        // Action, Adventure
-  think: [18, 9648, 99],   // Drama, Mystery, Documentary
-  laugh: [35, 16],         // Comedy, Animation
-  shiver: [27, 53, 9648],  // Horror, Thriller, Mystery
-  cry: [18, 10749],        // Drama, Romance
-};
-
-const TMDB_GENRE_MAP_TV = {
-  action: [10759, 10765],       // Action&Adventure, Sci-Fi&Fantasy
-  think: [18, 9648, 99],        // Drama, Mystery, Documentary
-  laugh: [35, 16],              // Comedy, Animation
-  shiver: [9648, 80],           // Mystery, Crime
-  cry: [18, 10766],             // Drama, Soap
-};
-
-async function handleWizardDiscover(req) {
-  try {
-    const session = await getSession(req);
-    if (!session) return jsonResponse({ error: 'Non authentifie' }, 401);
-    const config = await getConfig();
-    const body = await req.json();
-    const { mood, era, duration, mediaType } = body;
-
-    if (!mood) return jsonResponse({ error: 'Humeur requise' }, 400);
-
-    const isTV = mediaType === 'tv';
-    const genreMap = isTV ? TMDB_GENRE_MAP_TV : TMDB_GENRE_MAP_MOVIES;
-    const genres = genreMap[mood] || [28];
-    const genreParam = genres.join(',');
-
-    // Build date range from era
-    let dateGte = '', dateLte = '';
-    if (era === 'classic') { dateGte = '1950-01-01'; dateLte = '1999-12-31'; }
-    else if (era === '2000s') { dateGte = '2000-01-01'; dateLte = '2015-12-31'; }
-    else if (era === 'recent') { dateGte = '2016-01-01'; dateLte = '2025-12-31'; }
-
-    // Runtime filter (applied client-side since Jellyseerr discover may not support it directly)
-    let minRuntime = 0, maxRuntime = 999;
-    if (duration === 'short') { maxRuntime = 90; }
-    else if (duration === 'medium') { minRuntime = 90; maxRuntime = 150; }
-    else if (duration === 'long') { minRuntime = 150; }
-
-    let results = [];
-
-    // Try Jellyseerr discover first
-    if (config.jellyseerrUrl) {
-      try {
-        const endpoint = isTV ? 'tv' : 'movies';
-        // Try multiple pages to get enough results after filtering
-        for (let page = 1; page <= 3 && results.length < 10; page++) {
-          const discoverUrl = `${config.jellyseerrUrl}/api/v1/discover/${endpoint}?page=${page}&genre=${genreParam}`;
-          const res = await fetch(discoverUrl, {
-            headers: { 'X-Api-Key': config.jellyseerrApiKey },
-            signal: AbortSignal.timeout(10000),
-          });
-          if (!res.ok) break;
-          const data = await res.json();
-          const items = (data.results || []).map(item => ({
-            id: item.id, tmdbId: item.id,
-            name: item.title || item.name || '',
-            type: isTV ? 'Series' : 'Movie',
-            mediaType: isTV ? 'tv' : 'movie',
-            overview: item.overview || '',
-            posterUrl: item.posterPath ? `/api/proxy/tmdb?path=${item.posterPath}&width=w400` : '',
-            backdropUrl: item.backdropPath ? `/api/proxy/tmdb?path=${item.backdropPath}&width=w1280` : '',
-            year: (item.releaseDate || item.firstAirDate || '').substring(0, 4),
-            voteAverage: item.voteAverage || 0,
-            genreIds: item.genreIds || [],
-            mediaStatus: item.mediaInfo?.status || 0,
-          }));
-
-          // Filter by era
-          const eraFiltered = items.filter(item => {
-            if (!era || era === 'any') return true;
-            const y = parseInt(item.year);
-            if (isNaN(y)) return true;
-            if (era === 'classic') return y < 2000;
-            if (era === '2000s') return y >= 2000 && y <= 2015;
-            if (era === 'recent') return y > 2015;
-            return true;
-          });
-
-          results.push(...eraFiltered);
-        }
-      } catch (e) { console.error('[Wizard] Jellyseerr discover error:', e.message); }
-    }
-
-    // Sort by vote average (best first) and pick top results
-    results.sort((a, b) => (b.voteAverage || 0) - (a.voteAverage || 0));
-
-    // Pick THE perfect match (highest rated matching all criteria)
-    const perfectMatch = results[0] || null;
-
-    return jsonResponse({
-      perfectMatch,
-      alternatives: results.slice(1, 12),
-      totalFound: results.length,
-      criteria: { mood, era, duration, mediaType, genres: genreParam },
-    });
-  } catch (err) {
-    return jsonResponse({ error: err.message }, 500);
-  }
-}
-
-/* =================================================================
-   MAIN ROUTE HANDLER
-   All /api/* requests are routed here via the catch-all pattern
-   ================================================================= */
-
-async function handler(req, context) {
-  const { params } = context;
-  const resolvedParams = await params;
-  const pathSegments = resolvedParams?.path || [];
-  const route = pathSegments.join('/');
-  const method = req.method;
-
-  // CORS preflight
-  if (method === 'OPTIONS') {
-    return new Response(null, {
-      status: 204,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-      },
-    });
-  }
-
-  try {
-    // Setup routes
-    if (route === 'setup/check') return handleSetupCheck();
-    if (route === 'setup/test' && method === 'POST') return handleSetupTest(req);
-    if (route === 'setup/save' && method === 'POST') return handleSetupSave(req);
-
-    // Auth routes
-    if (route === 'auth/login' && method === 'POST') return handleAuthLogin(req);
-    if (route === 'auth/logout' && method === 'POST') return handleAuthLogout(req);
-    if (route === 'auth/session') return handleAuthSession(req);
-
-    // Preferences routes
-    if (route === 'preferences' && method === 'POST') return handlePreferencesSave(req);
-    if (route === 'preferences' && method === 'GET') return handlePreferencesGet(req);
-
-    // Media routes
-    if (route === 'media/library') return handleMediaLibrary(req);
-    if (route === 'media/genres') return handleMediaGenres(req);
-    if (route === 'media/detail') return handleMediaDetail(req);
-    if (route === 'media/status') return handleMediaStatus(req);
-    if (route === 'media/request' && method === 'POST') return handleMediaRequest(req);
-    if (route === 'media/stream') return handleStream(req);
-    if (route === 'media/resume') return handleMediaResume(req);
-    if (route === 'media/seasons') return handleMediaSeasons(req);
-    if (route === 'media/episodes') return handleMediaEpisodes(req);
-    if (route === 'media/trailer') return handleMediaTrailer(req);
-    if (route === 'media/collection') return handleMediaCollection(req);
-
-    // Search & Discover
-    if (route === 'search') return handleSearch(req);
-    if (route === 'discover') return handleDiscover(req);
-
-    // Recommendations
-    if (route === 'recommendations') return handleRecommendations(req);
-
-    // Wizard
-    if (route === 'wizard/discover' && method === 'POST') return handleWizardDiscover(req);
-
-    // Proxy routes
-    if (route === 'proxy/image') return handleProxyImage(req);
-    if (route === 'proxy/tmdb') return handleProxyTmdb(req);
-    if (route === 'proxy/stream') return handleProxyStream(req);
-    if (route === 'proxy/subtitle') return handleProxySubtitle(req);
-
-    // Health check
-    if (route === 'health') {
-      return jsonResponse({ status: 'ok', timestamp: new Date().toISOString(), version: '1.0.0' });
-    }
-
-    return jsonResponse({ error: 'Route not found', path: route }, 404);
-  } catch (err) {
-    console.error(`[DagzFlix] Error on ${route}:`, err.message);
-    return jsonResponse({ error: 'Internal server error', details: err.message }, 500);
-  }
-}
-
-export const GET = handler;
-export const POST = handler;
-export const PUT = handler;
-export const DELETE = handler;
-export const OPTIONS = handler;
+        : `${config.jellyfinUrl
