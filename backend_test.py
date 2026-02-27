@@ -448,7 +448,14 @@ def run_comprehensive_backend_tests():
     results['preferences_unauth'] = test_preferences_without_auth()
     results['search_unauth'] = test_search_without_auth()
     
-    # 5. Error handling
+    # 5. V2 NEW ENDPOINTS - Testing authentication requirements
+    print("🆕 Testing V2 New Endpoints (authentication requirements)...")
+    results['media_seasons_unauth'] = test_media_seasons_without_auth()
+    results['media_episodes_unauth'] = test_media_episodes_without_auth()
+    results['media_trailer_unauth'] = test_media_trailer_without_auth()
+    results['media_collection_unauth'] = test_media_collection_without_auth()
+    
+    # 6. Error handling
     results['404_route'] = test_404_route()
     results['setup_test'] = test_setup_test_connection()
     
@@ -463,9 +470,23 @@ def run_comprehensive_backend_tests():
     print(f"Tests Passed: {passed}/{total}")
     print()
     
+    # Separate existing vs new endpoint results
+    existing_endpoints = ['health', 'setup_check_initial', 'setup_save', 'setup_check_after', 
+                         'auth_session_unauth', 'auth_session_invalid', 'preferences_unauth', 
+                         'search_unauth', '404_route', 'setup_test']
+    
+    new_endpoints = ['media_seasons_unauth', 'media_episodes_unauth', 'media_trailer_unauth', 'media_collection_unauth']
+    
+    existing_passed = sum(1 for ep in existing_endpoints if results.get(ep, False))
+    new_passed = sum(1 for ep in new_endpoints if results.get(ep, False))
+    
+    print(f"✅ Existing Endpoints: {existing_passed}/{len(existing_endpoints)} passed")
+    print(f"🆕 New V2 Endpoints: {new_passed}/{len(new_endpoints)} passed")
+    print()
+    
     if passed == total:
         print("🎉 ALL BACKEND TESTS PASSED!")
-        print("The DagzFlix backend API is working correctly.")
+        print("The DagzFlix backend API V2 is working correctly.")
     else:
         print("⚠️  Some tests failed. Review the details above.")
         for test_name, result in results.items():
