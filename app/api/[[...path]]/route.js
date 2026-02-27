@@ -1508,6 +1508,7 @@ async function handler(req, context) {
     if (route === 'media/status') return handleMediaStatus(req);
     if (route === 'media/request' && method === 'POST') return handleMediaRequest(req);
     if (route === 'media/stream') return handleStream(req);
+    if (route === 'media/resume') return handleMediaResume(req);
     if (route === 'media/seasons') return handleMediaSeasons(req);
     if (route === 'media/episodes') return handleMediaEpisodes(req);
     if (route === 'media/trailer') return handleMediaTrailer(req);
