@@ -1266,3 +1266,474 @@ async function handleStream(req) {
       url: s.DeliveryUrl
         ? `${config.jellyfinUrl}${s.DeliveryUrl}`
         : `${config.jellyfinUrl
+}/Videos/${itemId}/Subtitles/${s.Index}/Stream.${s.Codec === 'webvtt' ? 'vtt' : (s.Codec || 'srt')}?api_key=${session.jellyfinToken}`,
+    }));
+
+    const audioTracks = streams.filter(s => s.Type === 'Audio').map((s, idx) => ({
+      index: s.Index,
+      language: s.Language || 'und',
+      displayTitle: s.DisplayTitle || s.Title || s.Language || `Audio ${idx + 1}`,
+      codec: s.Codec,
+      channels: s.Channels || 2,
+      isDefault: s.IsDefault || false,
+    }));
+
+    const durationSecs = ms0?.RunTimeTicks ? Math.round(ms0.RunTimeTicks / 10000000) : 0;
+
+    return jsonResponse({
+      streamUrl,
+      directPlayUrl: directUrl,
+      subtitles,
+      audioTracks,
+      duration: durationSecs,
+      playSessionId: psId || '',
+      mediaSourceId: ms0?.Id || '',
+      needsAudioTranscode,
+      audioCodec,
+    });
+  } catch (err) {
+    console.error('[DagzFlix] Stream error:', err.message);
+    return jsonResponse({ error: err.message }, 500);
+  }
+}
+
+/* =================================================================
+   SERIES - Seasons and Episodes from Jellyfin
+   ================================================================= */
+
+async function handleMediaSeasons(req) {
+  try {
+    const session = await getSession(req);
+    if (!session) return jsonResponse({ error: 'Non authentifie' }, 401);
+
+    const config = await getConfig();
+    const url = new URL(req.url);
+    const seriesId = url.searchParams.get('seriesId');
+
+    if (!seriesId) return jsonResponse({ error: 'seriesId requis' }, 400);
+
+    const res = await fetch(
+      `${config.jellyfinUrl}/Shows/${seriesId}/Seasons?UserId=${session.jellyfinUserId}&Fields=Overview,Genres,CommunityRating`,
+      {
+        headers: { 'X-Emby-Token': session.jellyfinToken },
+        signal: AbortSignal.timeout(30000), // BUG 3 FIX
+      }
+    );
+
+    if (!res.ok) throw new Error(`Jellyfin responded with ${res.status}`);
+    const data = await res.json();
+
+    const seasons = (data.Items || []).map(s => ({
+      id: s.Id,
+      name: s.Name,
+      indexNumber: s.IndexNumber || 0,
+      episodeCount: s.ChildCount || 0,
+      year: s.ProductionYear || '',
+      posterUrl: `/api/proxy/image?itemId=${s.Id}&type=Primary&maxWidth=300`,
+      isPlayed: s.UserData?.Played || false,
+      playedPercentage: s.UserData?.PlayedPercentage || 0,
+    }));
+
+    return jsonResponse({ seasons, seriesId });
+  } catch (err) {
+    return jsonResponse({ seasons: [], error: err.message }, 500);
+  }
+}
+
+async function handleMediaEpisodes(req) {
+  try {
+    const session = await getSession(req);
+    if (!session) return jsonResponse({ error: 'Non authentifie' }, 401);
+
+    const config = await getConfig();
+    const url = new URL(req.url);
+    const seriesId = url.searchParams.get('seriesId');
+    const seasonId = url.searchParams.get('seasonId');
+
+    if (!seriesId) return jsonResponse({ error: 'seriesId requis' }, 400);
+
+    const params = new URLSearchParams({
+      UserId: session.jellyfinUserId,
+      Fields: 'Overview,MediaSources,RunTimeTicks',
+    });
+    if (seasonId) params.set('SeasonId', seasonId);
+
+    const res = await fetch(
+      `${config.jellyfinUrl}/Shows/${seriesId}/Episodes?${params.toString()}`,
+      {
+        headers: { 'X-Emby-Token': session.jellyfinToken },
+        signal: AbortSignal.timeout(30000), // BUG 3 FIX
+      }
+    );
+
+    if (!res.ok) throw new Error(`Jellyfin responded with ${res.status}`);
+    const data = await res.json();
+
+    const episodes = (data.Items || []).map(ep => ({
+      id: ep.Id,
+      name: ep.Name,
+      indexNumber: ep.IndexNumber || 0,
+      parentIndexNumber: ep.ParentIndexNumber || 0,
+      overview: ep.Overview || '',
+      runtime: ep.RunTimeTicks ? Math.round(ep.RunTimeTicks / 600000000) : 0,
+      thumbUrl: `/api/proxy/image?itemId=${ep.Id}&type=Primary&maxWidth=400`,
+      isPlayed: ep.UserData?.Played || false,
+      playbackPositionTicks: ep.UserData?.PlaybackPositionTicks || 0,
+      hasMediaSource: (ep.MediaSources || []).length > 0,
+    }));
+
+    return jsonResponse({ episodes, seriesId, seasonId });
+  } catch (err) {
+    return jsonResponse({ episodes: [], error: err.message }, 500);
+  }
+}
+
+async function handleMediaTrailer(req) {
+  try {
+    const session = await getSession(req);
+    if (!session) return jsonResponse({ error: 'Non authentifie' }, 401);
+
+    const config = await getConfig();
+    const url = new URL(req.url);
+    const itemId = url.searchParams.get('id');
+    const tmdbId = url.searchParams.get('tmdbId');
+    const mediaType = url.searchParams.get('mediaType') || 'movie';
+
+    if (!itemId && !tmdbId) return jsonResponse({ error: 'id ou tmdbId requis' }, 400);
+
+    let trailers = [];
+
+    // Try Jellyfin trailers first
+    if (itemId) {
+      try {
+        const res = await fetch(
+          `${config.jellyfinUrl}/Users/${session.jellyfinUserId}/Items/${itemId}/LocalTrailers`,
+          {
+            headers: { 'X-Emby-Token': session.jellyfinToken },
+            signal: AbortSignal.timeout(30000), // BUG 3 FIX
+          }
+        );
+        if (res.ok) {
+          const data = await res.json();
+          trailers = (data || []).map(t => ({
+            id: t.Id,
+            name: t.Name,
+            url: `/api/media/stream?id=${t.Id}`,
+            source: 'jellyfin',
+          }));
+        }
+      } catch (e) { /* ignore */ }
+    }
+
+    // Try Jellyseerr/TMDB trailers
+    if (trailers.length === 0 && tmdbId && config.jellyseerrUrl) {
+      try {
+        const endpoint = mediaType === 'tv' ? 'tv' : 'movie';
+        const res = await fetch(
+          `${config.jellyseerrUrl}/api/v1/${endpoint}/${tmdbId}/videos`,
+          {
+            headers: { 'X-Api-Key': config.jellyseerrApiKey },
+            signal: AbortSignal.timeout(30000), // BUG 3 FIX
+          }
+        );
+        if (res.ok) {
+          const data = await res.json();
+          const ytTrailers = (data.results || []).filter(v => v.site === 'YouTube' && v.type === 'Trailer');
+          trailers = ytTrailers.map(v => ({
+            id: v.id,
+            name: v.name,
+            url: `https://www.youtube.com/watch?v=${v.key}`,
+            youtubeKey: v.key,
+            source: 'youtube',
+          }));
+        }
+      } catch (e) { /* ignore */ }
+    }
+
+    return jsonResponse({ trailers });
+  } catch (err) {
+    return jsonResponse({ trailers: [], error: err.message }, 500);
+  }
+}
+
+async function handleMediaCollection(req) {
+  try {
+    const session = await getSession(req);
+    if (!session) return jsonResponse({ error: 'Non authentifie' }, 401);
+
+    const config = await getConfig();
+    const url = new URL(req.url);
+    const tmdbId = url.searchParams.get('tmdbId');
+    const id = url.searchParams.get('id');
+
+    if (!tmdbId && !id) return jsonResponse({ error: 'id ou tmdbId requis' }, 400);
+
+    let collection = null;
+
+    // Try Jellyseerr for TMDB collection data
+    if (tmdbId && config.jellyseerrUrl) {
+      try {
+        // Get movie details to find collection ID
+        const movieRes = await fetch(
+          `${config.jellyseerrUrl}/api/v1/movie/${tmdbId}`,
+          {
+            headers: { 'X-Api-Key': config.jellyseerrApiKey },
+            signal: AbortSignal.timeout(30000), // BUG 3 FIX
+          }
+        );
+        if (movieRes.ok) {
+          const movieData = await movieRes.json();
+          const collectionId = movieData.belongsToCollection?.id;
+          if (collectionId) {
+            const colRes = await fetch(
+              `${config.jellyseerrUrl}/api/v1/collection/${collectionId}`,
+              {
+                headers: { 'X-Api-Key': config.jellyseerrApiKey },
+                signal: AbortSignal.timeout(30000), // BUG 3 FIX
+              }
+            );
+            if (colRes.ok) {
+              const colData = await colRes.json();
+              collection = {
+                id: colData.id,
+                name: colData.name,
+                overview: colData.overview || '',
+                posterUrl: colData.posterPath ? `/api/proxy/tmdb?path=${colData.posterPath}&width=w400` : '',
+                parts: (colData.parts || []).map(p => ({
+                  id: p.id,
+                  tmdbId: p.id,
+                  name: p.title || p.name || '',
+                  year: (p.releaseDate || '').substring(0, 4),
+                  posterUrl: p.posterPath ? `/api/proxy/tmdb?path=${p.posterPath}&width=w300` : '',
+                  voteAverage: p.voteAverage || 0,
+                  mediaStatus: p.mediaInfo?.status || 0,
+                })),
+              };
+            }
+          }
+        }
+      } catch (e) { /* ignore */ }
+    }
+
+    return jsonResponse({ collection });
+  } catch (err) {
+    return jsonResponse({ collection: null, error: err.message }, 500);
+  }
+}
+
+/* =================================================================
+   BUG 4c FIX: WIZARD DISCOVER ("Le Magicien")
+   Increased to 5 pages, relaxed runtime margins, runtime filter
+   applied only for movies, fallback if empty results.
+   ================================================================= */
+
+async function handleWizardDiscover(req) {
+  try {
+    const session = await getSession(req);
+    if (!session) return jsonResponse({ error: 'Non authentifie' }, 401);
+
+    const config = await getConfig();
+    const url = new URL(req.url);
+    const era = url.searchParams.get('era') || 'all'; // 'classic', '90s', '2000s', 'recent', 'all'
+    const mood = url.searchParams.get('mood') || ''; // e.g. 'action', 'comedy'
+    const runtimePref = url.searchParams.get('runtime') || 'any'; // 'short', 'medium', 'long', 'any'
+    const type = url.searchParams.get('type') || 'movie'; // 'movie' or 'tv'
+
+    if (!config.jellyseerrUrl) {
+      return jsonResponse({ results: [], error: 'Jellyseerr non configure' });
+    }
+
+    const endpoint = type === 'tv' ? 'tv' : 'movies';
+
+    // BUG 4c FIX: Relaxed runtime margins (minutes)
+    const runtimeRanges = {
+      short: { min: 0, max: 105 },   // was 0-90, now 0-105
+      medium: { min: 75, max: 165 }, // was 90-150, now 75-165
+      long: { min: 135, max: Infinity }, // was 150+, now 135+
+      any: { min: 0, max: Infinity },
+    };
+    const { min: minRuntime, max: maxRuntime } = runtimeRanges[runtimePref] || runtimeRanges.any;
+
+    // Era year ranges
+    const eraRanges = {
+      classic: { minYear: 1900, maxYear: 1979 },
+      '90s': { minYear: 1990, maxYear: 1999 },
+      '2000s': { minYear: 2000, maxYear: 2009 },
+      recent: { minYear: 2010, maxYear: new Date().getFullYear() },
+      all: { minYear: 1900, maxYear: new Date().getFullYear() },
+    };
+    const { minYear, maxYear } = eraRanges[era] || eraRanges.all;
+
+    const moodLower = mood ? mood.toLowerCase() : '';
+
+    // Helper: apply era and mood filters (shared between main pass and runtime-fallback)
+    const applyBaseFilters = (items) => {
+      let filtered = items.filter(item => {
+        const releaseYear = parseInt((item.releaseDate || item.firstAirDate || '0').substring(0, 4));
+        return releaseYear >= minYear && releaseYear <= maxYear;
+      });
+      if (moodLower) {
+        filtered = filtered.filter(item => {
+          const genreNames = (item.genreIds || [])
+            .map(id => (TMDB_GENRE_ID_TO_NAME[id] || '').toLowerCase());
+          return genreNames.some(g => g.includes(moodLower));
+        });
+      }
+      return filtered;
+    };
+
+    let results = [];
+
+    // BUG 4c FIX: Scan up to 5 pages (was 3)
+    for (let page = 1; page <= 5 && results.length < 10; page++) {
+      try {
+        const discRes = await fetch(
+          `${config.jellyseerrUrl}/api/v1/discover/${endpoint}?page=${page}`,
+          { headers: { 'X-Api-Key': config.jellyseerrApiKey }, signal: AbortSignal.timeout(30000) }
+        );
+        if (!discRes.ok) break;
+        const discData = await discRes.json();
+
+        let items = applyBaseFilters(discData.results || []);
+
+        // BUG 4c FIX: Apply runtime filter only for movies (TV runtimes are per-episode)
+        if (type === 'movie' && runtimePref !== 'any') {
+          items = items.filter(item => {
+            const runtimeMin = item.runtime || 0;
+            return runtimeMin >= minRuntime && (maxRuntime === Infinity || runtimeMin <= maxRuntime);
+          });
+        }
+
+        results.push(...items);
+      } catch (e) { break; }
+    }
+
+    // BUG 4c FIX: If no results after filtering, retry without runtime filter
+    if (results.length === 0 && type === 'movie' && runtimePref !== 'any') {
+      for (let page = 1; page <= 5 && results.length < 10; page++) {
+        try {
+          const discRes = await fetch(
+            `${config.jellyseerrUrl}/api/v1/discover/${endpoint}?page=${page}`,
+            { headers: { 'X-Api-Key': config.jellyseerrApiKey }, signal: AbortSignal.timeout(30000) }
+          );
+          if (!discRes.ok) break;
+          const discData = await discRes.json();
+          // No runtime filter in fallback
+          results.push(...applyBaseFilters(discData.results || []));
+        } catch (e) { break; }
+      }
+    }
+
+    const mapped = results.slice(0, 20).map(item => ({
+      id: item.id,
+      tmdbId: item.id,
+      name: item.title || item.name || '',
+      type: type === 'tv' ? 'Series' : 'Movie',
+      mediaType: type === 'tv' ? 'tv' : 'movie',
+      overview: item.overview || '',
+      posterUrl: item.posterPath ? `/api/proxy/tmdb?path=${item.posterPath}&width=w400` : '',
+      backdropUrl: item.backdropPath ? `/api/proxy/tmdb?path=${item.backdropPath}&width=w1280` : '',
+      year: (item.releaseDate || item.firstAirDate || '').substring(0, 4),
+      voteAverage: item.voteAverage || 0,
+      genreIds: item.genreIds || [],
+      mediaStatus: item.mediaInfo?.status || 0,
+      runtime: item.runtime || 0,
+    }));
+
+    return jsonResponse({ results: mapped, totalFound: results.length });
+  } catch (err) {
+    return jsonResponse({ results: [], error: err.message }, 500);
+  }
+}
+
+/* =================================================================
+   HEALTH CHECK
+   ================================================================= */
+
+async function handleHealth() {
+  return jsonResponse({ status: 'ok', timestamp: new Date().toISOString(), version: '1.0.0' });
+}
+
+/* =================================================================
+   MAIN ROUTER - Catch-all [[...path]] handler
+   All API routes are dispatched here.
+   ================================================================= */
+
+async function handler(req) {
+  const url = new URL(req.url);
+  // path segments after /api/
+  const pathParts = url.pathname.replace(/^\/api\//, '').split('/').filter(Boolean);
+  const route = pathParts.join('/');
+  const method = req.method.toUpperCase();
+
+  // Health check
+  if (route === 'health' && method === 'GET') return handleHealth();
+
+  // Setup routes
+  if (route === 'setup/check' && method === 'GET') return handleSetupCheck();
+  if (route === 'setup/test' && method === 'POST') return handleSetupTest(req);
+  if (route === 'setup/save' && method === 'POST') return handleSetupSave(req);
+
+  // Auth routes
+  if (route === 'auth/login' && method === 'POST') return handleAuthLogin(req);
+  if (route === 'auth/logout' && method === 'POST') return handleAuthLogout(req);
+  if (route === 'auth/session' && method === 'GET') return handleAuthSession(req);
+
+  // Preferences
+  if (route === 'preferences' && method === 'POST') return handlePreferencesSave(req);
+  if (route === 'preferences' && method === 'GET') return handlePreferencesGet(req);
+
+  // Media library routes
+  if (route === 'media/library' && method === 'GET') return handleMediaLibrary(req);
+  if (route === 'media/genres' && method === 'GET') return handleMediaGenres(req);
+  if (route === 'media/detail' && method === 'GET') return handleMediaDetail(req);
+  if (route === 'media/resume' && method === 'GET') return handleMediaResume(req);
+
+  // BUG 2 FIX: Progress tracking
+  if (route === 'media/progress' && method === 'POST') return handleMediaProgress(req);
+
+  // Smart button
+  if (route === 'media/status' && method === 'GET') return handleMediaStatus(req);
+  if (route === 'media/request' && method === 'POST') return handleMediaRequest(req);
+
+  // Series
+  if (route === 'media/seasons' && method === 'GET') return handleMediaSeasons(req);
+  if (route === 'media/episodes' && method === 'GET') return handleMediaEpisodes(req);
+
+  // Trailer & collection
+  if (route === 'media/trailer' && method === 'GET') return handleMediaTrailer(req);
+  if (route === 'media/collection' && method === 'GET') return handleMediaCollection(req);
+
+  // Stream
+  if (route === 'media/stream' && method === 'GET') return handleStream(req);
+
+  // Search & discover
+  if (route === 'search' && method === 'GET') return handleSearch(req);
+  if (route === 'discover' && method === 'GET') return handleDiscover(req);
+  if (route === 'wizard/discover' && method === 'GET') return handleWizardDiscover(req);
+
+  // Recommendations (DagzRank)
+  if (route === 'recommendations' && method === 'GET') return handleRecommendations(req);
+
+  // Image proxies
+  if (route === 'proxy/image') return handleProxyImage(req);
+  if (route === 'proxy/tmdb') return handleProxyTmdb(req);
+
+  // 404 fallback
+  return jsonResponse({ error: `Route not found: ${method} /api/${route}` }, 404);
+}
+
+export async function GET(req) { return handler(req); }
+export async function POST(req) { return handler(req); }
+export async function PUT(req) { return handler(req); }
+export async function DELETE(req) { return handler(req); }
+export async function OPTIONS() {
+  return new Response(null, {
+    status: 204,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    },
+  });
+}
