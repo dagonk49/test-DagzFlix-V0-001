@@ -78,7 +78,7 @@ def test_setup_check_initial():
 def test_setup_save():
     """Test POST /api/setup/save - should save configuration"""
     try:
-        url = urljoin(BASE_URL, "setup/save")
+        url = f"{BASE_URL}/setup/save"
         print(f"Testing: POST {url}")
         
         payload = {
