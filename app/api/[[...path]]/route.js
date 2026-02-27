@@ -1308,6 +1308,116 @@ async function handleMediaCollection(req) {
 }
 
 /* =================================================================
+   LE MAGICIEN - Wizard Discovery API
+   Maps mood/era/duration to TMDB genres and queries Jellyseerr
+   ================================================================= */
+
+const TMDB_GENRE_MAP_MOVIES = {
+  action: [28, 12],        // Action, Adventure
+  think: [18, 9648, 99],   // Drama, Mystery, Documentary
+  laugh: [35, 16],         // Comedy, Animation
+  shiver: [27, 53, 9648],  // Horror, Thriller, Mystery
+  cry: [18, 10749],        // Drama, Romance
+};
+
+const TMDB_GENRE_MAP_TV = {
+  action: [10759, 10765],       // Action&Adventure, Sci-Fi&Fantasy
+  think: [18, 9648, 99],        // Drama, Mystery, Documentary
+  laugh: [35, 16],              // Comedy, Animation
+  shiver: [9648, 80],           // Mystery, Crime
+  cry: [18, 10766],             // Drama, Soap
+};
+
+async function handleWizardDiscover(req) {
+  try {
+    const session = await getSession(req);
+    if (!session) return jsonResponse({ error: 'Non authentifie' }, 401);
+    const config = await getConfig();
+    const body = await req.json();
+    const { mood, era, duration, mediaType } = body;
+
+    if (!mood) return jsonResponse({ error: 'Humeur requise' }, 400);
+
+    const isTV = mediaType === 'tv';
+    const genreMap = isTV ? TMDB_GENRE_MAP_TV : TMDB_GENRE_MAP_MOVIES;
+    const genres = genreMap[mood] || [28];
+    const genreParam = genres.join(',');
+
+    // Build date range from era
+    let dateGte = '', dateLte = '';
+    if (era === 'classic') { dateGte = '1950-01-01'; dateLte = '1999-12-31'; }
+    else if (era === '2000s') { dateGte = '2000-01-01'; dateLte = '2015-12-31'; }
+    else if (era === 'recent') { dateGte = '2016-01-01'; dateLte = '2025-12-31'; }
+
+    // Runtime filter (applied client-side since Jellyseerr discover may not support it directly)
+    let minRuntime = 0, maxRuntime = 999;
+    if (duration === 'short') { maxRuntime = 90; }
+    else if (duration === 'medium') { minRuntime = 90; maxRuntime = 150; }
+    else if (duration === 'long') { minRuntime = 150; }
+
+    let results = [];
+
+    // Try Jellyseerr discover first
+    if (config.jellyseerrUrl) {
+      try {
+        const endpoint = isTV ? 'tv' : 'movies';
+        // Try multiple pages to get enough results after filtering
+        for (let page = 1; page <= 3 && results.length < 10; page++) {
+          const discoverUrl = `${config.jellyseerrUrl}/api/v1/discover/${endpoint}?page=${page}&genre=${genreParam}`;
+          const res = await fetch(discoverUrl, {
+            headers: { 'X-Api-Key': config.jellyseerrApiKey },
+            signal: AbortSignal.timeout(10000),
+          });
+          if (!res.ok) break;
+          const data = await res.json();
+          const items = (data.results || []).map(item => ({
+            id: item.id, tmdbId: item.id,
+            name: item.title || item.name || '',
+            type: isTV ? 'Series' : 'Movie',
+            mediaType: isTV ? 'tv' : 'movie',
+            overview: item.overview || '',
+            posterUrl: item.posterPath ? `/api/proxy/tmdb?path=${item.posterPath}&width=w400` : '',
+            backdropUrl: item.backdropPath ? `/api/proxy/tmdb?path=${item.backdropPath}&width=w1280` : '',
+            year: (item.releaseDate || item.firstAirDate || '').substring(0, 4),
+            voteAverage: item.voteAverage || 0,
+            genreIds: item.genreIds || [],
+            mediaStatus: item.mediaInfo?.status || 0,
+          }));
+
+          // Filter by era
+          const eraFiltered = items.filter(item => {
+            if (!era || era === 'any') return true;
+            const y = parseInt(item.year);
+            if (isNaN(y)) return true;
+            if (era === 'classic') return y < 2000;
+            if (era === '2000s') return y >= 2000 && y <= 2015;
+            if (era === 'recent') return y > 2015;
+            return true;
+          });
+
+          results.push(...eraFiltered);
+        }
+      } catch (e) { console.error('[Wizard] Jellyseerr discover error:', e.message); }
+    }
+
+    // Sort by vote average (best first) and pick top results
+    results.sort((a, b) => (b.voteAverage || 0) - (a.voteAverage || 0));
+
+    // Pick THE perfect match (highest rated matching all criteria)
+    const perfectMatch = results[0] || null;
+
+    return jsonResponse({
+      perfectMatch,
+      alternatives: results.slice(1, 12),
+      totalFound: results.length,
+      criteria: { mood, era, duration, mediaType, genres: genreParam },
+    });
+  } catch (err) {
+    return jsonResponse({ error: err.message }, 500);
+  }
+}
+
+/* =================================================================
    MAIN ROUTE HANDLER
    All /api/* requests are routed here via the catch-all pattern
    ================================================================= */
