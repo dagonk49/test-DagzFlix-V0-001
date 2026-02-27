@@ -21,7 +21,7 @@ export function HeroSection({ item, onPlay, onDetail }) {
           <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8 }}>
             {item?.dagzRank > 0 && (
               <div className="inline-flex items-center gap-1.5 bg-red-600/20 backdrop-blur-sm border border-red-500/20 text-red-300 rounded-full px-3 py-1 text-sm font-medium mb-4">
-                <Sparkles className="w-3.5 h-3.5" />Recommand\u00E9 \u00E0 {item.dagzRank}%
+                <Sparkles className="w-3.5 h-3.5" />Recommandé à {item.dagzRank}%
               </div>
             )}
             <h1 className="text-4xl md:text-6xl font-black mb-4 leading-[1.1]">{item?.name || 'DAGZFLIX'}</h1>

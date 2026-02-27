@@ -36,7 +36,7 @@ export function SearchView({ query, onItemClick }) {
           {results.map((item, i) => <MediaCard key={item.id || i} item={item} onClick={onItemClick} />)}
         </div>
       ) : (
-        <div className="text-center py-24"><Search className="w-16 h-16 text-gray-800 mx-auto mb-4" /><h3 className="text-xl text-gray-500">Aucun r\u00E9sultat</h3></div>
+        <div className="text-center py-24"><Search className="w-16 h-16 text-gray-800 mx-auto mb-4" /><h3 className="text-xl text-gray-500">Aucun résultat</h3></div>
       )}
     </div>
   );

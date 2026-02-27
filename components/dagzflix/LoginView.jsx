@@ -20,7 +20,7 @@ export function LoginView({ onLogin }) {
     try {
       const r = await api('auth/login', { method: 'POST', body: JSON.stringify({ username: u, password: p }) });
       if (r.success) { invalidateCache('auth'); onLogin(r.user, r.onboardingComplete); }
-      else setError(r.error || '\u00C9chec');
+      else setError(r.error || 'Échec');
     } catch (e) { setError(e.message); }
     setLoading(false);
   };

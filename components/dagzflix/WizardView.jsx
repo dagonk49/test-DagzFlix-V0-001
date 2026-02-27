@@ -61,8 +61,8 @@ export function WizardView({ mediaType, onItemClick }) {
         {step === 2 && (
           <motion.div key="w2" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="text-center">
             <div className="w-20 h-20 bg-blue-600/15 rounded-3xl flex items-center justify-center mx-auto mb-6"><CalendarDays className="w-10 h-10 text-blue-400" /></div>
-            <h2 className="text-2xl font-bold mb-2">De quelle \u00E9poque ?</h2>
-            <p className="text-gray-500 mb-8">Choisis la p\u00E9riode qui te parle</p>
+            <h2 className="text-2xl font-bold mb-2">De quelle époque ?</h2>
+            <p className="text-gray-500 mb-8">Choisis la période qui te parle</p>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-2xl mx-auto">
               {ERAS.map(e => (
                 <button key={e.id} data-testid={`wizard-era-${e.id}`} onClick={() => { setEra(e.id); setStep(3); }}
@@ -80,7 +80,7 @@ export function WizardView({ mediaType, onItemClick }) {
           <motion.div key="w3" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="text-center">
             <div className="w-20 h-20 bg-green-600/15 rounded-3xl flex items-center justify-center mx-auto mb-6"><Timer className="w-10 h-10 text-green-400" /></div>
             <h2 className="text-2xl font-bold mb-2">Combien de temps as-tu ?</h2>
-            <p className="text-gray-500 mb-8">On adapte la dur\u00E9e \u00E0 ton planning</p>
+            <p className="text-gray-500 mb-8">On adapte la durée à ton planning</p>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-2xl mx-auto">
               {DURATIONS.map(dd => (
                 <button key={dd.id} data-testid={`wizard-dur-${dd.id}`} onClick={() => { setDuration(dd.id); setStep(4); }}
@@ -102,13 +102,13 @@ export function WizardView({ mediaType, onItemClick }) {
                   <Wand2 className="w-20 h-20 text-purple-400" />
                 </motion.div>
                 <h2 className="text-xl font-bold mb-2">Le Magicien cherche...</h2>
-                <p className="text-gray-500">Analyse de tes go\u00FBts en cours</p>
+                <p className="text-gray-500">Analyse de tes goûts en cours</p>
               </div>
             ) : result ? (
               <div>
                 <div className="text-center mb-8">
-                  <h2 className="text-2xl font-bold mb-2">Nous avons trouv\u00E9 LE {isTV ? 'programme' : 'film'} parfait pour toi</h2>
-                  <p className="text-gray-500">Bas\u00E9 sur ton humeur, tes pr\u00E9f\u00E9rences et notre algorithme</p>
+                  <h2 className="text-2xl font-bold mb-2">Nous avons trouvé LE {isTV ? 'programme' : 'film'} parfait pour toi</h2>
+                  <p className="text-gray-500">Basé sur ton humeur, tes préférences et notre algorithme</p>
                 </div>
                 <div data-testid="wizard-result" className="relative max-w-4xl mx-auto mb-12 rounded-3xl overflow-hidden glass-strong">
                   <div className="flex flex-col md:flex-row">
@@ -126,7 +126,7 @@ export function WizardView({ mediaType, onItemClick }) {
                         </div>
                         <p className="text-gray-300 mb-6 leading-relaxed line-clamp-4">{result.overview}</p>
                         <Button data-testid="wizard-result-detail" onClick={() => onItemClick(result)} className="bg-white hover:bg-gray-100 text-black font-bold px-8 h-12 rounded-xl">
-                          <Info className="w-5 h-5 mr-2" />Voir les d\u00E9tails
+                          <Info className="w-5 h-5 mr-2" />Voir les détails
                         </Button>
                       </div>
                     </div>
@@ -143,9 +143,9 @@ export function WizardView({ mediaType, onItemClick }) {
             ) : (
               <div className="text-center py-20">
                 <AlertCircle className="w-16 h-16 text-gray-700 mx-auto mb-4" />
-                <h3 className="text-xl font-bold mb-2">Aucun r\u00E9sultat</h3>
-                <p className="text-gray-500 mb-6">Le Magicien n'a rien trouv\u00E9. Essaie d'autres crit\u00E8res !</p>
-                <Button onClick={reset} variant="outline" className="border-white/10 text-gray-300 rounded-xl"><Wand2 className="w-4 h-4 mr-2" />R\u00E9essayer</Button>
+                <h3 className="text-xl font-bold mb-2">Aucun résultat</h3>
+                <p className="text-gray-500 mb-6">Le Magicien n'a rien trouvé. Essaie d'autres critères !</p>
+                <Button onClick={reset} variant="outline" className="border-white/10 text-gray-300 rounded-xl"><Wand2 className="w-4 h-4 mr-2" />Réessayer</Button>
               </div>
             )}
           </motion.div>

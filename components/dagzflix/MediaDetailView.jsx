@@ -141,7 +141,7 @@ export function MediaDetailView({ item, onBack, onPlay, onItemClick }) {
               {d?.year && <span className="px-3 py-1.5 rounded-xl bg-white/5 text-gray-300 text-sm">{d.year}</span>}
               {d?.runtime > 0 && <span className="px-3 py-1.5 rounded-xl bg-white/5 text-gray-300 text-sm flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" />{d.runtime} min</span>}
               {(d?.communityRating || d?.voteAverage) > 0 && <span className="px-3 py-1.5 rounded-xl bg-yellow-500/10 text-yellow-400 text-sm flex items-center gap-1.5"><Star className="w-3.5 h-3.5 fill-current" />{(d.communityRating || d.voteAverage).toFixed(1)}</span>}
-              <span className="px-3 py-1.5 rounded-xl bg-white/5 text-gray-300 text-sm flex items-center gap-1.5">{isSeries ? <><Tv className="w-3.5 h-3.5" />S\u00E9rie</> : <><Film className="w-3.5 h-3.5" />Film</>}</span>
+              <span className="px-3 py-1.5 rounded-xl bg-white/5 text-gray-300 text-sm flex items-center gap-1.5">{isSeries ? <><Tv className="w-3.5 h-3.5" />Série</> : <><Film className="w-3.5 h-3.5" />Film</>}</span>
               {isSeries && seasons.length > 0 && <span className="px-3 py-1.5 rounded-xl bg-purple-500/10 text-purple-300 text-sm flex items-center gap-1.5"><Layers className="w-3.5 h-3.5" />{seasons.length} saison{seasons.length > 1 ? 's' : ''}</span>}
             </div>
             {(d?.genres || []).length > 0 && (
@@ -169,7 +169,7 @@ export function MediaDetailView({ item, onBack, onPlay, onItemClick }) {
         {/* Seasons & Episodes */}
         {isSeries && seasons.length > 0 && (
           <div className="mt-14">
-            <h2 className="text-xl font-bold mb-6 flex items-center gap-2"><Layers className="w-5 h-5 text-purple-400" />Saisons et \u00C9pisodes</h2>
+            <h2 className="text-xl font-bold mb-6 flex items-center gap-2"><Layers className="w-5 h-5 text-purple-400" />Saisons et Épisodes</h2>
             <div className="flex gap-2 mb-6 overflow-x-auto hide-scrollbar pb-2">
               {seasons.map(s => (
                 <button key={s.id} data-testid={`season-${s.seasonNumber}`} onClick={() => { setSelectedSeason(s); fetchEps(d.id, s.id); }}
@@ -183,7 +183,7 @@ export function MediaDetailView({ item, onBack, onPlay, onItemClick }) {
             ) : (
               <div className="grid gap-3">
                 {episodes.map(ep => <EpisodeCard key={ep.id} ep={ep} onPlay={(id) => { setPlayEpId(id); setShowPlayer(true); }} />)}
-                {episodes.length === 0 && <div className="text-center py-12 text-gray-600"><p>Aucun \u00E9pisode disponible</p></div>}
+                {episodes.length === 0 && <div className="text-center py-12 text-gray-600"><p>Aucun épisode disponible</p></div>}
               </div>
             )}
           </div>

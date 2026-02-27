@@ -38,12 +38,12 @@ export function SmartButton({ item, onPlay }) {
 
   const cls = 'h-13 px-8 text-base font-bold rounded-xl transition-all';
 
-  if (status === 'loading') return <Button data-testid="smart-btn-loading" className={`${cls} bg-white/5 text-gray-500`} disabled><Loader2 className="w-5 h-5 animate-spin mr-2" />V\u00E9rification...</Button>;
+  if (status === 'loading') return <Button data-testid="smart-btn-loading" className={`${cls} bg-white/5 text-gray-500`} disabled><Loader2 className="w-5 h-5 animate-spin mr-2" />Vérification...</Button>;
   if (status === 'available' || status === 'partial') return <Button data-testid="smart-btn-play" onClick={() => onPlay(item)} className={`${cls} bg-white hover:bg-gray-100 text-black shadow-xl shadow-white/10`}><Play className="w-5 h-5 mr-2 fill-current" />LECTURE</Button>;
   if (status === 'pending') return <Button data-testid="smart-btn-pending" className={`${cls} bg-yellow-500/10 text-yellow-400 border border-yellow-500/30`} disabled><Clock className="w-5 h-5 mr-2" />EN COURS</Button>;
   return (
     <Button data-testid="smart-btn-request" onClick={req} disabled={requesting || requested} className={`${cls} bg-red-600 hover:bg-red-700 text-white shadow-xl shadow-red-600/20`}>
-      {requesting ? <><Loader2 className="w-5 h-5 animate-spin mr-2" />Envoi...</> : requested ? <><Check className="w-5 h-5 mr-2" />Envoy\u00E9e</> : <><Download className="w-5 h-5 mr-2" />DEMANDER</>}
+      {requesting ? <><Loader2 className="w-5 h-5 animate-spin mr-2" />Envoi...</> : requested ? <><Check className="w-5 h-5 mr-2" />Envoyée</> : <><Download className="w-5 h-5 mr-2" />DEMANDER</>}
     </Button>
   );
 }

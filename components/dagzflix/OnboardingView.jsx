@@ -32,7 +32,7 @@ export function OnboardingView({ onComplete }) {
           <p className="text-gray-500">Personnalisez vos recommandations</p>
         </div>
         <div className="glass-strong rounded-3xl p-8 mb-6">
-          <h3 className="text-base font-semibold mb-4 flex items-center gap-2"><Heart className="w-5 h-5 text-red-500" />Genres ador\u00E9s</h3>
+          <h3 className="text-base font-semibold mb-4 flex items-center gap-2"><Heart className="w-5 h-5 text-red-500" />Genres adorés</h3>
           <div className="flex flex-wrap gap-2">
             {GENRE_LIST.map(g => (
               <button key={g} data-testid={`onboard-fav-${g}`} onClick={() => toggle(g, fav, setFav, dis, setDis)}
@@ -43,7 +43,7 @@ export function OnboardingView({ onComplete }) {
           </div>
         </div>
         <div className="glass-strong rounded-3xl p-8 mb-8">
-          <h3 className="text-base font-semibold mb-4 flex items-center gap-2"><ThumbsDown className="w-5 h-5 text-gray-500" />Genres \u00E0 \u00E9viter</h3>
+          <h3 className="text-base font-semibold mb-4 flex items-center gap-2"><ThumbsDown className="w-5 h-5 text-gray-500" />Genres à éviter</h3>
           <div className="flex flex-wrap gap-2">
             {GENRE_LIST.map(g => (
               <button key={g} data-testid={`onboard-dis-${g}`} onClick={() => toggle(g, dis, setDis, fav, setFav)}

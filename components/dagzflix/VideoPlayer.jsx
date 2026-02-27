@@ -132,7 +132,7 @@ export function VideoPlayer({ item, episodeId, onClose }) {
                       <button data-testid="player-subs-toggle" onClick={() => { setShowSubMenu(!showSubMenu); setShowAudioMenu(false); }} className={`p-2 rounded-xl transition-all ${activeSub >= 0 ? 'bg-white/20 text-white' : 'hover:bg-white/10 text-gray-400'}`}><Subtitles className="w-5 h-5" /></button>
                       {showSubMenu && (
                         <div className="absolute bottom-12 right-0 glass-strong rounded-2xl p-2 min-w-[200px] max-h-[300px] overflow-y-auto">
-                          <button onClick={() => handleSub(-1)} className={`w-full text-left px-3 py-2 rounded-xl text-sm ${activeSub === -1 ? 'bg-white/10 text-white' : 'text-gray-400 hover:bg-white/5'}`}>D\u00E9sactiver</button>
+                          <button onClick={() => handleSub(-1)} className={`w-full text-left px-3 py-2 rounded-xl text-sm ${activeSub === -1 ? 'bg-white/10 text-white' : 'text-gray-400 hover:bg-white/5'}`}>Désactiver</button>
                           {subtitles.map((s, i) => <button key={i} onClick={() => handleSub(i)} className={`w-full text-left px-3 py-2 rounded-xl text-sm ${activeSub === i ? 'bg-white/10 text-white' : 'text-gray-400 hover:bg-white/5'}`}>{s.displayTitle}</button>)}
                         </div>
                       )}

@@ -10,7 +10,7 @@ import { WizardView } from './WizardView';
 export function MediaTypePage({ mediaType, onItemClick, onPlay }) {
   const [tab, setTab] = useState('library');
   const isTV = mediaType === 'series';
-  const label = isTV ? 'S\u00E9ries' : 'Films';
+  const label = isTV ? 'Séries' : 'Films';
   const jellyfinType = isTV ? 'Series' : 'Movie';
 
   // Search
@@ -53,7 +53,7 @@ export function MediaTypePage({ mediaType, onItemClick, onPlay }) {
   useEffect(() => { loadLib(); }, []);
 
   const TABS = [
-    { id: 'library', label: 'Ma Biblioth\u00E8que', icon: Library },
+    { id: 'library', label: 'Ma Bibliothèque', icon: Library },
     { id: 'search', label: 'Recherche', icon: Search },
     { id: 'dagzrank', label: 'DagzRank', icon: Sparkles },
     { id: 'wizard', label: 'Le Magicien', icon: Wand2 },
@@ -84,7 +84,7 @@ export function MediaTypePage({ mediaType, onItemClick, onPlay }) {
             <form onSubmit={(e) => { e.preventDefault(); doSearch(searchQ); }} className="mb-8 max-w-2xl">
               <div className="relative">
                 <Input data-testid="media-search-input" value={searchQ} onChange={e => setSearchQ(e.target.value)}
-                  placeholder={`Rechercher ${isTV ? 'une s\u00E9rie' : 'un film'}...`}
+                  placeholder={`Rechercher ${isTV ? 'une série' : 'un film'}...`}
                   className="bg-white/5 border-white/10 text-white h-14 pl-14 text-lg rounded-2xl" autoFocus />
                 <Search className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
               </div>
@@ -93,7 +93,7 @@ export function MediaTypePage({ mediaType, onItemClick, onPlay }) {
               searchResults.length > 0 ? (
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-5">{searchResults.map((item, i) => <MediaCard key={item.id || i} item={item} onClick={onItemClick} />)}</div>
               ) : searchQ ? (
-                <div className="text-center py-16"><Search className="w-12 h-12 text-gray-800 mx-auto mb-3" /><p className="text-gray-500">Aucun r\u00E9sultat</p></div>
+                <div className="text-center py-16"><Search className="w-12 h-12 text-gray-800 mx-auto mb-3" /><p className="text-gray-500">Aucun résultat</p></div>
               ) : (
                 <div className="text-center py-16"><Search className="w-12 h-12 text-gray-800 mx-auto mb-3" /><p className="text-gray-500">Tapez pour rechercher des {label.toLowerCase()}</p></div>
               )}
@@ -101,7 +101,7 @@ export function MediaTypePage({ mediaType, onItemClick, onPlay }) {
         )}
         {tab === 'dagzrank' && (
           <motion.div key="dagzrank" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-            <div className="flex items-center gap-2 mb-6"><Sparkles className="w-5 h-5 text-red-500" /><h2 className="text-lg font-bold">Recommandations personnalis\u00E9es</h2></div>
+            <div className="flex items-center gap-2 mb-6"><Sparkles className="w-5 h-5 text-red-500" /><h2 className="text-lg font-bold">Recommandations personnalisées</h2></div>
             {recoLoading ? <SkeletonGrid /> :
               recos.length > 0 ? (
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-5">{recos.map((item, i) => <MediaCard key={item.id || i} item={item} onClick={onItemClick} />)}</div>
@@ -117,7 +117,7 @@ export function MediaTypePage({ mediaType, onItemClick, onPlay }) {
               library.length > 0 ? (
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-5">{library.map((item, i) => <MediaCard key={item.id || i} item={item} onClick={onItemClick} />)}</div>
               ) : (
-                <div className="text-center py-16"><Library className="w-12 h-12 text-gray-800 mx-auto mb-3" /><p className="text-gray-500">Aucun {isTV ? 's\u00E9rie' : 'film'} dans la biblioth\u00E8que</p></div>
+                <div className="text-center py-16"><Library className="w-12 h-12 text-gray-800 mx-auto mb-3" /><p className="text-gray-500">Aucun {isTV ? 'série' : 'film'} dans la bibliothèque</p></div>
               )}
           </motion.div>
         )}

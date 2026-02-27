@@ -64,11 +64,11 @@ export function DashboardView({ user, onItemClick, onPlay }) {
       <HeroSection item={heroItem} onPlay={onPlay} onDetail={onItemClick} />
       <div className="-mt-12 relative z-10">
         <MediaRow title="Reprendre la lecture" items={continueW} icon={<Play className="w-5 h-5 text-blue-400" />} onItemClick={onItemClick} loading={loads.continueW} />
-        <MediaRow title="Recommand\u00E9 pour vous" items={reco} icon={<Sparkles className="w-5 h-5 text-red-500" />} onItemClick={onItemClick} loading={loads.reco} size="large" />
-        <MediaRow title="Films r\u00E9cents" items={movies} icon={<Film className="w-5 h-5 text-blue-400" />} onItemClick={onItemClick} loading={loads.movies} />
-        <MediaRow title="S\u00E9ries r\u00E9centes" items={series} icon={<Tv className="w-5 h-5 text-green-400" />} onItemClick={onItemClick} loading={loads.series} />
+        <MediaRow title="Recommandé pour vous" items={reco} icon={<Sparkles className="w-5 h-5 text-red-500" />} onItemClick={onItemClick} loading={loads.reco} size="large" />
+        <MediaRow title="Films récents" items={movies} icon={<Film className="w-5 h-5 text-blue-400" />} onItemClick={onItemClick} loading={loads.movies} />
+        <MediaRow title="Séries récentes" items={series} icon={<Tv className="w-5 h-5 text-green-400" />} onItemClick={onItemClick} loading={loads.series} />
         <MediaRow title="Tendances Films" items={trendM} icon={<TrendingUp className="w-5 h-5 text-orange-400" />} onItemClick={onItemClick} loading={loads.trendM} />
-        <MediaRow title="Tendances S\u00E9ries" items={trendS} icon={<TrendingUp className="w-5 h-5 text-purple-400" />} onItemClick={onItemClick} loading={loads.trendS} />
+        <MediaRow title="Tendances Séries" items={trendS} icon={<TrendingUp className="w-5 h-5 text-purple-400" />} onItemClick={onItemClick} loading={loads.trendS} />
       </div>
       <div className="h-20" />
     </div>

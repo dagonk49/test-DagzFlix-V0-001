@@ -22,7 +22,7 @@ export function Navbar({ user, onSearch, onNavigate, currentView }) {
   const navItems = [
     { id: 'dashboard', label: 'Accueil', icon: Home },
     { id: 'movies', label: 'Films', icon: Film },
-    { id: 'series', label: 'S\u00E9ries', icon: Tv },
+    { id: 'series', label: 'Séries', icon: Tv },
   ];
 
   return (
@@ -58,7 +58,7 @@ export function Navbar({ user, onSearch, onNavigate, currentView }) {
           <div data-testid="nav-user-avatar" className="w-9 h-9 rounded-xl bg-gradient-to-br from-red-600 to-red-800 flex items-center justify-center text-white font-bold text-sm shadow-lg shadow-red-600/20">
             {user?.name?.[0]?.toUpperCase() || 'U'}
           </div>
-          <button data-testid="nav-logout" onClick={logout} className="p-2 rounded-xl text-gray-500 hover:text-red-500 hover:bg-white/5" title="D\u00E9connexion">
+          <button data-testid="nav-logout" onClick={logout} className="p-2 rounded-xl text-gray-500 hover:text-red-500 hover:bg-white/5" title="Déconnexion">
             <LogOut className="w-4 h-4" />
           </button>
         </div>
