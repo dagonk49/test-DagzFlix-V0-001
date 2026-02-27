@@ -1475,6 +1475,9 @@ async function handler(req, context) {
     // Recommendations
     if (route === 'recommendations') return handleRecommendations(req);
 
+    // Wizard
+    if (route === 'wizard/discover' && method === 'POST') return handleWizardDiscover(req);
+
     // Proxy routes
     if (route === 'proxy/image') return handleProxyImage(req);
     if (route === 'proxy/tmdb') return handleProxyTmdb(req);
