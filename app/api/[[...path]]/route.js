@@ -510,6 +510,51 @@ async function handleMediaDetail(req) {
 }
 
 /* =================================================================
+   CONTINUE WATCHING - Resume items from Jellyfin
+   ================================================================= */
+
+async function handleMediaResume(req) {
+  try {
+    const session = await getSession(req);
+    if (!session) return jsonResponse({ error: 'Non authentifie' }, 401);
+
+    const config = await getConfig();
+    const res = await fetch(
+      `${config.jellyfinUrl}/Users/${session.jellyfinUserId}/Items/Resume?Limit=20&Recursive=true&Fields=Overview,Genres,CommunityRating,PremiereDate,RunTimeTicks,MediaSources&MediaTypes=Video&ImageTypeLimit=1&EnableImageTypes=Primary,Backdrop,Thumb`,
+      {
+        headers: { 'X-Emby-Token': session.jellyfinToken },
+        signal: AbortSignal.timeout(10000),
+      }
+    );
+
+    if (!res.ok) throw new Error(`Jellyfin responded with ${res.status}`);
+    const data = await res.json();
+
+    const items = (data.Items || []).map(item => ({
+      id: item.Id,
+      name: item.Name,
+      type: item.Type,
+      seriesName: item.SeriesName || '',
+      overview: item.Overview || '',
+      genres: item.Genres || [],
+      communityRating: item.CommunityRating || 0,
+      year: item.ProductionYear || '',
+      runtime: item.RunTimeTicks ? Math.round(item.RunTimeTicks / 600000000) : 0,
+      posterUrl: `/api/proxy/image?itemId=${item.Id}&type=Primary&maxWidth=400`,
+      backdropUrl: `/api/proxy/image?itemId=${item.Id}&type=Backdrop&maxWidth=1920`,
+      thumbUrl: `/api/proxy/image?itemId=${item.Id}&type=Thumb&maxWidth=600`,
+      playbackPositionTicks: item.UserData?.PlaybackPositionTicks || 0,
+      playbackPercentage: item.UserData?.PlayedPercentage || 0,
+    }));
+
+    return jsonResponse({ items });
+  } catch (err) {
+    console.error('[DagzFlix] Resume error:', err.message);
+    return jsonResponse({ items: [], error: err.message }, 500);
+  }
+}
+
+/* =================================================================
    SMART BUTTON - Unified status check
    Checks both Jellyfin (availability) and Jellyseerr (request status)
    ================================================================= */
