@@ -1460,6 +1460,7 @@ async function handler(req, context) {
     if (route === 'proxy/image') return handleProxyImage(req);
     if (route === 'proxy/tmdb') return handleProxyTmdb(req);
     if (route === 'proxy/stream') return handleProxyStream(req);
+    if (route === 'proxy/subtitle') return handleProxySubtitle(req);
 
     // Health check
     if (route === 'health') {
