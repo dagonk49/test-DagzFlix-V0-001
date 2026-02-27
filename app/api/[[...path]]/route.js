@@ -950,7 +950,7 @@ async function handleProxyTmdb(req) {
   }
 }
 
-/** Get streaming URL (returns proxy URL for the video player) */
+/** Get streaming URL with full media info (subtitles, audio tracks, duration) */
 async function handleStream(req) {
   try {
     const session = await getSession(req);
@@ -967,20 +967,24 @@ async function handleStream(req) {
       `${config.jellyfinUrl}/Items/${itemId}/PlaybackInfo?UserId=${session.jellyfinUserId}`,
       {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Emby-Token': session.jellyfinToken,
-        },
+        headers: { 'Content-Type': 'application/json', 'X-Emby-Token': session.jellyfinToken },
         body: JSON.stringify({
           DeviceProfile: {
             MaxStreamingBitrate: 40000000,
             MaxStaticBitrate: 40000000,
             DirectPlayProfiles: [
-              { Container: 'mp4,m4v', Type: 'Video', VideoCodec: 'h264,hevc', AudioCodec: 'aac,mp3,ac3' },
-              { Container: 'mkv', Type: 'Video', VideoCodec: 'h264,hevc', AudioCodec: 'aac,mp3,ac3' },
+              { Container: 'mp4,m4v,webm', Type: 'Video', VideoCodec: 'h264,vp8,vp9', AudioCodec: 'aac,mp3,opus,flac' },
             ],
             TranscodingProfiles: [
-              { Container: 'mp4', Type: 'Video', VideoCodec: 'h264', AudioCodec: 'aac', Protocol: 'hls' },
+              { Container: 'mp4', Type: 'Video', VideoCodec: 'h264', AudioCodec: 'aac',
+                Protocol: 'http', Context: 'Streaming', MaxAudioChannels: '6',
+                CopyTimestamps: true, EnableSubtitlesInManifest: true },
+            ],
+            SubtitleProfiles: [
+              { Format: 'vtt', Method: 'External' },
+              { Format: 'srt', Method: 'External' },
+              { Format: 'ass', Method: 'External' },
+              { Format: 'ssa', Method: 'External' },
             ],
           },
         }),
@@ -990,22 +994,58 @@ async function handleStream(req) {
 
     if (!res.ok) throw new Error('Playback info failed');
     const playbackInfo = await res.json();
-
-    const mediaSources = playbackInfo.MediaSources || [];
+    const ms0 = (playbackInfo.MediaSources || [])[0];
     const playSessionId = playbackInfo.PlaySessionId;
+    const streams = ms0?.MediaStreams || [];
 
-    // Build streaming URL
-    const streamUrl = `/api/proxy/stream?id=${itemId}&mediaSourceId=${mediaSources[0]?.Id || ''}&playSessionId=${playSessionId || ''}`;
+    // Extract subtitle tracks
+    const subtitles = streams
+      .filter(s => s.Type === 'Subtitle')
+      .map((s, idx) => ({
+        index: s.Index,
+        language: s.Language || 'Unknown',
+        displayTitle: s.DisplayTitle || s.Title || s.Language || `Subtitle ${idx + 1}`,
+        codec: s.Codec,
+        isExternal: s.IsExternal || false,
+        deliveryUrl: s.DeliveryUrl
+          ? `/api/proxy/subtitle?url=${encodeURIComponent(s.DeliveryUrl)}`
+          : `/api/proxy/subtitle?itemId=${itemId}&index=${s.Index}`,
+      }));
+
+    // Extract audio tracks
+    const audioTracks = streams
+      .filter(s => s.Type === 'Audio')
+      .map(s => ({
+        index: s.Index,
+        language: s.Language || 'Unknown',
+        displayTitle: s.DisplayTitle || s.Title || s.Language || 'Audio',
+        codec: s.Codec,
+        channels: s.Channels || 2,
+        isDefault: s.IsDefault || false,
+      }));
+
+    // Build stream URL - use transcoding to ensure browser compatibility (AAC audio)
+    const useTranscode = !ms0?.SupportsDirectPlay;
+    let streamUrl;
+    if (useTranscode && ms0?.TranscodingUrl) {
+      streamUrl = `/api/proxy/stream?transcodingUrl=${encodeURIComponent(ms0.TranscodingUrl)}`;
+    } else {
+      streamUrl = `/api/proxy/stream?id=${itemId}&mediaSourceId=${ms0?.Id || ''}&playSessionId=${playSessionId || ''}`;
+    }
+
+    // Duration in seconds
+    const durationTicks = ms0?.RunTimeTicks || 0;
+    const durationSeconds = Math.round(durationTicks / 10000000);
 
     return jsonResponse({
       streamUrl,
-      mediaSources: mediaSources.map(ms => ({
-        id: ms.Id,
-        name: ms.Name,
-        directPlay: ms.SupportsDirectPlay,
-        directStream: ms.SupportsDirectStream,
-        transcoding: ms.SupportsTranscoding,
-        container: ms.Container,
+      duration: durationSeconds,
+      subtitles,
+      audioTracks,
+      mediaSources: (playbackInfo.MediaSources || []).map(m => ({
+        id: m.Id, name: m.Name,
+        directPlay: m.SupportsDirectPlay, directStream: m.SupportsDirectStream,
+        container: m.Container,
       })),
       playSessionId,
     });
@@ -1014,7 +1054,7 @@ async function handleStream(req) {
   }
 }
 
-/** Proxy actual video stream from Jellyfin */
+/** Proxy actual video stream from Jellyfin - supports Range requests for seeking */
 async function handleProxyStream(req) {
   try {
     const session = await getSession(req);
@@ -1025,25 +1065,84 @@ async function handleProxyStream(req) {
     const itemId = url.searchParams.get('id');
     const mediaSourceId = url.searchParams.get('mediaSourceId') || '';
     const playSessionId = url.searchParams.get('playSessionId') || '';
+    const transcodingUrl = url.searchParams.get('transcodingUrl');
 
-    if (!itemId) return new Response('Missing ID', { status: 400 });
+    let streamUrl;
+    if (transcodingUrl) {
+      // Use Jellyfin's transcoding URL (ensures browser-compatible codecs)
+      streamUrl = `${config.jellyfinUrl}${transcodingUrl}`;
+    } else if (itemId) {
+      // Direct stream with forced AAC audio transcoding for browser compat
+      streamUrl = `${config.jellyfinUrl}/Videos/${itemId}/stream.mp4?Static=false&MediaSourceId=${mediaSourceId}&PlaySessionId=${playSessionId}&VideoCodec=h264&AudioCodec=aac&AudioBitRate=192000&MaxAudioChannels=2&TranscodingMaxAudioChannels=2&api_key=${session.jellyfinToken}`;
+    } else {
+      return new Response('Missing stream parameters', { status: 400 });
+    }
 
-    const streamUrl = `${config.jellyfinUrl}/Videos/${itemId}/stream?Static=true&mediaSourceId=${mediaSourceId}&PlaySessionId=${playSessionId}&api_key=${session.jellyfinToken}`;
+    // Forward Range header for seeking support
+    const headers = {};
+    const rangeHeader = req.headers.get('range');
+    if (rangeHeader) headers['Range'] = rangeHeader;
 
-    const res = await fetch(streamUrl, { signal: AbortSignal.timeout(30000) });
+    const res = await fetch(streamUrl, { headers, signal: AbortSignal.timeout(60000) });
 
-    if (!res.ok) return new Response('Stream error', { status: res.status });
+    if (!res.ok && res.status !== 206) return new Response('Stream error', { status: res.status });
 
-    return new Response(res.body, {
+    // Build response headers
+    const respHeaders = {
+      'Content-Type': res.headers.get('content-type') || 'video/mp4',
+      'Accept-Ranges': 'bytes',
+      'Access-Control-Allow-Origin': '*',
+      'Cache-Control': 'no-cache',
+    };
+    // Forward content-range for seeks
+    if (res.headers.get('content-range')) respHeaders['Content-Range'] = res.headers.get('content-range');
+    if (res.headers.get('content-length')) respHeaders['Content-Length'] = res.headers.get('content-length');
+
+    return new Response(res.body, { status: res.status, headers: respHeaders });
+  } catch (err) {
+    return new Response('Stream proxy error: ' + err.message, { status: 500 });
+  }
+}
+
+/** Proxy subtitle files from Jellyfin */
+async function handleProxySubtitle(req) {
+  try {
+    const session = await getSession(req);
+    if (!session) return new Response('Unauthorized', { status: 401 });
+
+    const config = await getConfig();
+    const url = new URL(req.url);
+    const subUrl = url.searchParams.get('url');
+    const itemId = url.searchParams.get('itemId');
+    const index = url.searchParams.get('index');
+
+    let fetchUrl;
+    if (subUrl) {
+      fetchUrl = subUrl.startsWith('http') ? subUrl : `${config.jellyfinUrl}${subUrl}`;
+    } else if (itemId && index) {
+      fetchUrl = `${config.jellyfinUrl}/Videos/${itemId}/${itemId}/Subtitles/${index}/0/Stream.vtt?api_key=${session.jellyfinToken}`;
+    } else {
+      return new Response('Missing subtitle params', { status: 400 });
+    }
+
+    const res = await fetch(fetchUrl, {
+      headers: { 'X-Emby-Token': session.jellyfinToken },
+      signal: AbortSignal.timeout(10000),
+    });
+
+    if (!res.ok) return new Response('Subtitle not found', { status: 404 });
+    const text = await res.text();
+
+    return new Response(text, {
       status: 200,
       headers: {
-        'Content-Type': res.headers.get('content-type') || 'video/mp4',
-        'Accept-Ranges': 'bytes',
+        'Content-Type': 'text/vtt; charset=utf-8',
         'Access-Control-Allow-Origin': '*',
+        'Cache-Control': 'public, max-age=3600',
       },
     });
   } catch (err) {
-    return new Response('Stream proxy error', { status: 500 });
+    return new Response('Subtitle proxy error', { status: 500 });
   }
 }
 
