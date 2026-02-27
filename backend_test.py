@@ -281,7 +281,7 @@ def test_404_route():
 def test_setup_test_connection():
     """Test POST /api/setup/test - should handle connection test gracefully"""
     try:
-        url = urljoin(BASE_URL, "setup/test")
+        url = f"{BASE_URL}/setup/test"
         print(f"Testing: POST {url} (connection test)")
         
         payload = {
