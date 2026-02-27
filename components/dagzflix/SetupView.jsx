@@ -27,7 +27,7 @@ export function SetupView({ onComplete }) {
         body: JSON.stringify({ type: t, url: t === 'jellyfin' ? jUrl : sUrl, apiKey: t === 'jellyfin' ? jKey : sKey }),
       });
       if (r.success) setTestResult({ type: t, ...r });
-      else setError(r.error || '\u00C9chec');
+      else setError(r.error || 'Échec');
     } catch (e) { setError(e.message); }
     setTesting(false);
   };
@@ -68,7 +68,7 @@ export function SetupView({ onComplete }) {
               <div className="flex items-center gap-4 mb-8"><div className="p-3.5 bg-purple-500/15 rounded-2xl"><Server className="w-6 h-6 text-purple-400" /></div><div><h2 className="text-xl font-bold">Jellyfin</h2><p className="text-sm text-gray-500">Serveur de streaming</p></div></div>
               <div className="space-y-5">
                 <div><Label className="text-gray-400 text-xs uppercase tracking-wider mb-2 block">URL *</Label><Input data-testid="setup-jellyfin-url" value={jUrl} onChange={e => setJUrl(e.target.value)} placeholder="https://jellyfin.example.com" className="bg-white/5 border-white/10 text-white placeholder:text-gray-600 h-12 rounded-xl" /></div>
-                <div><Label className="text-gray-400 text-xs uppercase tracking-wider mb-2 block">Cl\u00E9 API</Label><Input data-testid="setup-jellyfin-key" value={jKey} onChange={e => setJKey(e.target.value)} placeholder="Cl\u00E9 API" className="bg-white/5 border-white/10 text-white placeholder:text-gray-600 h-12 rounded-xl" type="password" /></div>
+                <div><Label className="text-gray-400 text-xs uppercase tracking-wider mb-2 block">Clé API</Label><Input data-testid="setup-jellyfin-key" value={jKey} onChange={e => setJKey(e.target.value)} placeholder="Clé API" className="bg-white/5 border-white/10 text-white placeholder:text-gray-600 h-12 rounded-xl" type="password" /></div>
                 {testResult?.type === 'jellyfin' && <div className="p-4 bg-green-500/10 border border-green-500/20 rounded-2xl text-green-400 text-sm flex items-center gap-2"><Check className="w-4 h-4" />{testResult.serverName}</div>}
                 {error && <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-red-400 text-sm">{error}</div>}
                 <div className="flex gap-3">
@@ -80,10 +80,10 @@ export function SetupView({ onComplete }) {
           )}
           {step === 2 && (
             <motion.div key="s2" initial={{ opacity: 0, x: 40 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -40 }} className="glass-strong rounded-3xl p-8">
-              <div className="flex items-center gap-4 mb-8"><div className="p-3.5 bg-blue-500/15 rounded-2xl"><Download className="w-6 h-6 text-blue-400" /></div><div><h2 className="text-xl font-bold">Jellyseerr</h2><p className="text-sm text-gray-500">Requ\u00EAtes (optionnel)</p></div></div>
+              <div className="flex items-center gap-4 mb-8"><div className="p-3.5 bg-blue-500/15 rounded-2xl"><Download className="w-6 h-6 text-blue-400" /></div><div><h2 className="text-xl font-bold">Jellyseerr</h2><p className="text-sm text-gray-500">Requêtes (optionnel)</p></div></div>
               <div className="space-y-5">
                 <div><Label className="text-gray-400 text-xs uppercase tracking-wider mb-2 block">URL</Label><Input data-testid="setup-jellyseerr-url" value={sUrl} onChange={e => setSUrl(e.target.value)} placeholder="https://jellyseerr.example.com" className="bg-white/5 border-white/10 text-white placeholder:text-gray-600 h-12 rounded-xl" /></div>
-                <div><Label className="text-gray-400 text-xs uppercase tracking-wider mb-2 block">Cl\u00E9 API</Label><Input data-testid="setup-jellyseerr-key" value={sKey} onChange={e => setSKey(e.target.value)} placeholder="Cl\u00E9 API" className="bg-white/5 border-white/10 text-white placeholder:text-gray-600 h-12 rounded-xl" type="password" /></div>
+                <div><Label className="text-gray-400 text-xs uppercase tracking-wider mb-2 block">Clé API</Label><Input data-testid="setup-jellyseerr-key" value={sKey} onChange={e => setSKey(e.target.value)} placeholder="Clé API" className="bg-white/5 border-white/10 text-white placeholder:text-gray-600 h-12 rounded-xl" type="password" /></div>
                 {error && <div className="p-4 bg-red-500/10 rounded-2xl text-red-400 text-sm">{error}</div>}
                 <div className="flex gap-3">
                   <Button variant="outline" className="border-white/10 text-gray-300 h-12 rounded-xl" onClick={() => { setStep(1); setError(''); }}><ChevronLeft className="w-4 h-4 mr-1" />Retour</Button>
@@ -97,7 +97,7 @@ export function SetupView({ onComplete }) {
               <div className="flex items-center gap-4 mb-8"><div className="p-3.5 bg-green-500/15 rounded-2xl"><Shield className="w-6 h-6 text-green-400" /></div><div><h2 className="text-xl font-bold">Confirmation</h2></div></div>
               <div className="space-y-4">
                 <div className="p-5 bg-white/3 rounded-2xl border border-white/5"><p className="text-purple-400 text-sm font-semibold mb-1">Jellyfin</p><p className="text-sm text-gray-300 break-all">{jUrl}</p></div>
-                <div className="p-5 bg-white/3 rounded-2xl border border-white/5"><p className="text-blue-400 text-sm font-semibold mb-1">Jellyseerr</p><p className="text-sm text-gray-300 break-all">{sUrl || 'Non configur\u00E9'}</p></div>
+                <div className="p-5 bg-white/3 rounded-2xl border border-white/5"><p className="text-blue-400 text-sm font-semibold mb-1">Jellyseerr</p><p className="text-sm text-gray-300 break-all">{sUrl || 'Non configuré'}</p></div>
                 {error && <div className="p-4 bg-red-500/10 rounded-2xl text-red-400 text-sm">{error}</div>}
                 <div className="flex gap-3">
                   <Button variant="outline" className="border-white/10 text-gray-300 h-12 rounded-xl" onClick={() => setStep(2)}><ChevronLeft className="w-4 h-4 mr-1" />Retour</Button>
