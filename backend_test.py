@@ -144,7 +144,7 @@ def test_setup_check_after_save():
 def test_auth_session_unauthenticated():
     """Test GET /api/auth/session without authentication - should return authenticated: false"""
     try:
-        url = urljoin(BASE_URL, "auth/session")
+        url = f"{BASE_URL}/auth/session"
         print(f"Testing: GET {url} (unauthenticated)")
         
         response = requests.get(url, timeout=10)
@@ -170,7 +170,7 @@ def test_auth_session_unauthenticated():
 def test_auth_session_with_invalid_cookie():
     """Test GET /api/auth/session with invalid cookie - should handle gracefully"""
     try:
-        url = urljoin(BASE_URL, "auth/session")
+        url = f"{BASE_URL}/auth/session"
         print(f"Testing: GET {url} (with invalid cookie)")
         
         # Send request with invalid session cookie
