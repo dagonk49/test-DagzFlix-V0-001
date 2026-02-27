@@ -225,6 +225,54 @@ backend:
         agent: "testing"
         comment: "✅ PASSED - Image proxy endpoints working. Returns proper 400 error for missing parameters. TMDB and Jellyfin image proxying implemented."
 
+  - task: "Series seasons endpoint"
+    implemented: true
+    working: "NA"
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "GET /api/media/seasons?seriesId=xxx returns seasons list. Requires auth."
+
+  - task: "Series episodes endpoint"
+    implemented: true
+    working: "NA"
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "GET /api/media/episodes?seriesId=xxx&seasonId=xxx returns episodes. Requires auth."
+
+  - task: "Trailer endpoint"
+    implemented: true
+    working: "NA"
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "GET /api/media/trailer?id=xxx returns trailers from Jellyfin/TMDB. Requires auth."
+
+  - task: "Collection/saga endpoint"
+    implemented: true
+    working: "NA"
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "GET /api/media/collection?id=xxx returns movie saga. Requires auth."
+
 frontend:
   - task: "Setup wizard UI"
     implemented: true
