@@ -26,7 +26,7 @@ def log_test(test_name, success, details=""):
 def test_health_check():
     """Test GET /api/health - should return status ok"""
     try:
-        url = urljoin(BASE_URL, "health")
+        url = f"{BASE_URL}/health"
         print(f"Testing: GET {url}")
         
         response = requests.get(url, timeout=10)
