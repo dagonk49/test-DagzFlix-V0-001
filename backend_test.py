@@ -198,7 +198,7 @@ def test_auth_session_with_invalid_cookie():
 def test_preferences_without_auth():
     """Test POST /api/preferences without authentication - should return 401"""
     try:
-        url = urljoin(BASE_URL, "preferences")
+        url = f"{BASE_URL}/preferences"
         print(f"Testing: POST {url} (without auth)")
         
         payload = {
