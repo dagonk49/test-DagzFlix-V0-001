@@ -255,7 +255,7 @@ def test_search_without_auth():
 def test_404_route():
     """Test non-existent route - should return 404"""
     try:
-        url = urljoin(BASE_URL, "nonexistent")
+        url = f"{BASE_URL}/nonexistent"
         print(f"Testing: GET {url}")
         
         response = requests.get(url, timeout=10)
