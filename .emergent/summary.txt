@@ -1,0 +1,174 @@
+<analysis>
+<original_problem_statement>
+The user wants to build DagzFlix, a unified web application that acts as a smart front-end for their existing Jellyfin and Jellyseerr servers. The goal is to have a single, seamless interface for browsing, watching, and requesting media.
+
+**PRODUCT REQUIREMENTS:**
+1.  **Architecture:** Next.js 14 (App Router) with a Backend-For-Frontend (BFF) pattern. The client-side application should never communicate directly with the Jellyfin or Jellyseerr APIs.
+2.  **Setup:** On first launch, the app must present a  page for the admin to enter Jellyfin/Jellyseerr URLs and API keys, which are then stored securely on the server (in MongoDB).
+3.  **Authentication:** A proxy-based login system. The user enters Jellyfin credentials into DagzFlix, which validates them against the Jellyfin API and creates a secure, local HTTP-Only cookie session.
+4.  **UI/UX:**
+    *   A premium, modern UI blending the styles of Netflix and Apple TV (glassmorphism, rounded corners, fluid animations).
+    *   A Smart Button on media detail pages that dynamically changes its function (Play, Request, Pending) based on the media's status in Jellyfin/Jellyseerr.
+    *   Dedicated Movies and Series pages with a tabbed interface.
+    *   Detailed series pages showing seasons and episodes.
+    *   Support for displaying movie collections/sagas.
+    *   A video player with advanced controls (seek, volume, subtitles, audio tracks) styled like Apple TV's.
+5.  **Core Features:**
+    *   **DagzRank Algorithm:** A recommendation system based on user preferences, watch history, and ratings.
+    *   **The Wizard:** An interactive, step-by-step assistant on the Movies/Series pages that helps users discover content based on mood, era, and duration.
+    *   **Trailers:** A button to watch media trailers.
+6.  **Critical Bug Fix (from latest user request):**
+    *   The video streaming, which was previously proxied through the Next.js backend, is causing server timeouts.
+    *   The fix requires changing the architecture: the backend must now provide a **direct, token-authenticated URL to the Jellyfin stream** ( to force Direct Play), and the frontend player must use this URL. This is to stop piping video data through the Next.js API route.
+</original_problem_statement>
+
+**User's preferred language**: French (fr-FR). The next agent MUST respond in French.
+
+**what currently exists?**
+The project is a Next.js 14 application with a MongoDB backend for configuration storage. The UI has a glassmorphism (Apple TV/Netflix) style.
+The core structure for the setup wizard, login, and dashboard exists.
+The backend API () has been significantly refactored to address a critical streaming bug. Instead of proxying video data, the  endpoint now returns a JSON object containing a direct URL to the Jellyfin stream. A new  endpoint has also been added to support the Wizard feature.
+The frontend refactor to implement the user's latest requests is currently in progress.
+
+**Last working item**:
+-   **Last item agent was working:** A major frontend overhaul based on the user's 3 Missions request. This involves:
+    1.  Creating dedicated  and  pages with a tabbed interface (Search, Recommendations, Library, Wizard).
+    2.  Building the Wizard UI component ().
+    3.  Updating the video player () to use the new direct stream URL provided by the backend, fixing the critical timeout bug.
+-   **Status:** IN PROGRESS. The agent acknowledged the plan and was about to write the new frontend files (, , etc.) when it was interrupted by the user. The task is not complete.
+-   **Agent Testing Done:** N
+-   **Which testing method agent to use?**: . The backend changes (direct stream URL, wizard endpoint) need to be tested with . The new frontend requires extensive validation, so after getting user permission, use .
+-   **User Testing Done:** N
+
+**All Pending/In progress Issue list**:
+-   **Issue 1:** **Critical Streaming Timeout (P0)**
+    -   **Description:** The previous method of proxying video streams through Next.js API routes caused timeouts after ~60 seconds.
+    -   **Attempted fixes:** The backend API () was changed to return a direct, token-authenticated Jellyfin stream URL instead of piping the data.
+    -   **Next debug checklist:**
+        1.  Complete the **frontend part of the fix**: Ensure the  player component correctly fetches this JSON object and uses the  as its source.
+        2.  Verify the same logic is applied to subtitles ().
+        3.  Test video playback thoroughly to confirm the timeout is resolved and Direct Play is working (low CPU usage on Jellyfin server).
+    -   **Why fix this issue and what will be achieved with the fix?** This is the application's core functionality. Fixing it will make video playback possible.
+    -   **Status:** IN PROGRESS
+    -   **Is recurring issue?** N
+    -   **Should Test frontend/backend/both after fix?** Both.
+    -   **Blocked on other issue:** No.
+
+-   **Issue 2:** **Saga Display Bugs (P1)**
+    -   **Description:** User reported that when navigating between movie pages, the Saga/Collection information from the previous movie persists incorrectly, and the section doesn't hide for movies without a saga.
+    -   **Attempted fixes:** A previous agent claimed a fix by resetting state, but it was never verified by the user.
+    -   **Next debug checklist:**
+        1.  In the new frontend structure, ensure the state for media details (especially  or  data) is correctly reset or re-fetched on every route change.
+        2.  Check the component that renders the saga section and ensure it has proper conditional rendering (e.g., ).
+    -   **Why fix this issue and what will be achieved with the fix?** To ensure data integrity and a correct user interface.
+    -   **Status:** NOT STARTED (in the context of the new frontend refactor)
+    -   **Is recurring issue?** Y
+    -   **Should Test frontend/backend/both after fix?** Frontend.
+    -   **Blocked on other issue:** Blocked on Implement 3 Missions Frontend task.
+
+-   **Issue 3:** **Performance and Caching (P2)**
+    -   **Description:** The user complained about the app making too many requests to their server, causing high load.
+    -   **Attempted fixes:** A previous agent mentioned adding client-side caching, but its effectiveness is unverified.
+    -   **Next debug checklist:**
+        1.  Review the data-fetching logic in the new frontend pages.
+        2.  Implement a more robust caching strategy. Consider using  or  with stale-while-revalidate logic, or a simple in-memory cache for fetched data to reduce redundant API calls.
+        3.  Use browser developer tools to monitor network requests and confirm that caching is working.
+    -   **Why fix this issue and what will be achieved with the fix?** To improve app performance and reduce the load on the user's backend servers.
+    -   **Status:** NOT STARTED
+    -   **Is recurring issue?** Y
+    -   **Should Test frontend/backend/both after fix?** Frontend.
+    -   **Blocked on other issue:** Blocked on Implement 3 Missions Frontend task.
+
+**In progress Task List**:
+-   **Task 1:** **Implement 3 Missions Frontend (P0)**
+    -   **Description:** Create the new frontend structure and features as specified by the user's latest detailed request.
+    -   **Where to resume:** The agent was about to use  to create/update the frontend files. The next agent should:
+        1.  Verify if , , and  exist.
+        2.  If not, create them. If they exist, complete their implementation.
+        3.  Implement the tabbed UI inside the new pages.
+        4.  Build the step-by-step UI for the Wizard component.
+        5.  Update the video player component to handle the new direct stream URL logic from the backend.
+        6.  Update the main navigation to link to  and .
+    -   **What will be achieved with this?** This will deliver all the new features requested by the user and fix the critical streaming bug.
+    -   **Status:** IN PROGRESS
+    -   **Should Test frontend/backend/both after fix?** Both.
+    -   **Blocked on something:** No.
+
+**Upcoming and Future Tasks**
+There are no other pending tasks. All user requests are part of the current In progress work.
+
+**Completed work in this session**
+-   Initial MVP with setup wizard, login, and dashboard (DONE).
+-   UI refactor to a glassmorphism Apple TV/Netflix style (DONE).
+-   Backend endpoints for fetching series details, seasons, episodes, and sagas (DONE).
+-   **Backend Refactor for Streaming:** Changed  to return a direct stream URL instead of proxying video data (DONE - Backend portion only).
+-   **Backend Wizard Endpoint:** Created  to support the recommendation assistant (DONE - Backend portion only).
+
+**Earlier issues found/mentioned but not fixed**
+All known issues are listed in the **All Pending/In progress Issue list** section. The Saga and Caching issues were claimed to be fixed previously but were never verified and have been re-reported implicitly or explicitly by the user, so they are treated as active issues.
+
+**Known issue recurrence from previous fork**
+N/A
+
+**Code Architecture**
+
+
+**Key Technical Concepts**
+-   **BFF (Backend-For-Frontend):** All logic is handled in a single Next.js API route file, acting as a secure intermediary.
+-   **API Proxying:** The BFF forwards requests to Jellyfin/Jellyseerr, injecting credentials so they are never exposed to the client.
+-   **Direct Play URL Generation:** A major architectural shift where the backend *generates* a secure, direct stream URL instead of piping the stream, to solve a timeout issue.
+-   **Session Management:** Secure HTTP-Only cookies for managing user sessions.
+-   **UI:** TailwindCSS with Shadcn/UI for components and a custom glassmorphism theme.
+
+**key DB schema**
+-   **database**:  (from )
+-   **collection**: 
+    -   **document**:  (Structure is inferred)
+
+**changes in tech stack**
+No changes to the core tech stack. The primary change is the architectural pattern for video streaming.
+
+**All files of reference**
+-   : **CRITICAL.** Contains all backend logic. Recently updated for direct stream URLs and the wizard endpoint.
+-   : New file, work in progress.
+-   : New file, work in progress.
+-   : New component, work in progress.
+-   The file containing the  player component (likely  or a new ): Needs to be modified to use the new direct stream URL.
+
+**Critical Info for New Agent**
+-   **The streaming fix is paramount.** The user provided a very specific technical solution: stop proxying video data and instead provide a direct, token-authenticated URL from the backend to the frontend player. The backend part is done; you must complete the frontend implementation.
+-   You are resuming a major refactor. The agent was interrupted just before or after starting a  command for the new frontend pages. You must pick up exactly where it left off, completing the 3 Missions from the user's request.
+-   All user communication **MUST** be in French.
+
+**documents created in this job**
+None.
+
+**Last 10 User Messages and any pending HUMAN messages**
+1.  **User (pending):** Tu a fini ? (Are you finished?) - User is waiting for the result of the latest refactor.
+2.  **User:** Provided detailed 3 Missions: Fix streaming with Direct Play URLs, create dedicated Movies/Series pages with tabs, and build the Wizard assistant. (IN PROGRESS)
+3.  **User:** Reported multiple bugs: saga display error, incomplete video player, no audio, and excessive server requests (caching needed). (PARTIALLY ADDRESSED, PENDING VERIFICATION)
+4.  **User:** Asked for instructions on how to run the application locally. (RESOLVED)
+
+**Project Health Check:**
+-   **Broken:**
+    -   **Video Playback:** The core feature is non-functional due to server timeouts. A fix is currently in progress.
+-   **Mocked:**
+    -   None.
+
+**3rd Party Integrations**
+-   **Jellyfin:** Used for user authentication, media library access, and video streaming. Requires a user-provided URL and API key during setup.
+-   **Jellyseerr:** Used for media discovery and requests. Requires a user-provided URL and API key during setup.
+-   **MongoDB:** Used for storing the application's configuration. Can be a local instance or a user-provided Atlas URL.
+
+**Testing status**
+-   Testing agent used after significant changes: YES, but not for the most recent changes.
+-   Troubleshoot agent used after agent stuck in loop: NO
+-   Test files created: None. Tests are run via the testing agent.
+-   Known regressions: The streaming functionality is broken.
+
+**Credentials to test flow:**
+No credentials are provided. The application has a  flow where the user must provide their own Jellyfin and Jellyseerr credentials. The testing agent has been successfully mocking this flow.
+
+**What agent forgot to execute**
+The agent was in the middle of executing the user's 3 Missions request. It has not forgotten anything but was interrupted before completing the large frontend refactoring task. The entire frontend implementation for the new pages, wizard, and player fix is pending.
+</analysis>

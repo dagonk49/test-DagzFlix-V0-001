@@ -12,7 +12,7 @@ import requests
 import json
 import sys
 
-BASE_URL = "https://dagzrank-preview.preview.emergentagent.com/api"
+BASE_URL = "https://media-hub-dev-1.preview.emergentagent.com/api"
 
 def log_test(test_name, success, details=""):
     """Log test results with consistent formatting"""
