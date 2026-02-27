@@ -312,6 +312,112 @@ def test_setup_test_connection():
         log_test("Setup test connection", False, f"Exception: {str(e)}")
         return False
 
+# V2 NEW ENDPOINTS TESTS - Focus on authentication requirements
+
+def test_media_seasons_without_auth():
+    """Test GET /api/media/seasons without authentication - should return 401"""
+    try:
+        url = f"{BASE_URL}/media/seasons"
+        print(f"Testing: GET {url} (without auth)")
+        
+        response = requests.get(url, timeout=10)
+        print(f"Status Code: {response.status_code}")
+        print(f"Response: {response.text[:200]}")
+        
+        if response.status_code == 401:
+            data = response.json()
+            if 'error' in data and 'authentif' in data['error'].lower():
+                log_test("Media seasons endpoint without auth", True, f"Correctly returned 401: {data}")
+                return True
+            else:
+                log_test("Media seasons endpoint without auth", False, f"Wrong error message. Got: {data}")
+                return False
+        else:
+            log_test("Media seasons endpoint without auth", False, f"Expected 401, got {response.status_code}")
+            return False
+            
+    except Exception as e:
+        log_test("Media seasons endpoint without auth", False, f"Exception: {str(e)}")
+        return False
+
+def test_media_episodes_without_auth():
+    """Test GET /api/media/episodes without authentication - should return 401"""
+    try:
+        url = f"{BASE_URL}/media/episodes"
+        print(f"Testing: GET {url} (without auth)")
+        
+        response = requests.get(url, timeout=10)
+        print(f"Status Code: {response.status_code}")
+        print(f"Response: {response.text[:200]}")
+        
+        if response.status_code == 401:
+            data = response.json()
+            if 'error' in data and 'authentif' in data['error'].lower():
+                log_test("Media episodes endpoint without auth", True, f"Correctly returned 401: {data}")
+                return True
+            else:
+                log_test("Media episodes endpoint without auth", False, f"Wrong error message. Got: {data}")
+                return False
+        else:
+            log_test("Media episodes endpoint without auth", False, f"Expected 401, got {response.status_code}")
+            return False
+            
+    except Exception as e:
+        log_test("Media episodes endpoint without auth", False, f"Exception: {str(e)}")
+        return False
+
+def test_media_trailer_without_auth():
+    """Test GET /api/media/trailer without authentication - should return 401"""
+    try:
+        url = f"{BASE_URL}/media/trailer"
+        print(f"Testing: GET {url} (without auth)")
+        
+        response = requests.get(url, timeout=10)
+        print(f"Status Code: {response.status_code}")
+        print(f"Response: {response.text[:200]}")
+        
+        if response.status_code == 401:
+            data = response.json()
+            if 'error' in data and 'authentif' in data['error'].lower():
+                log_test("Media trailer endpoint without auth", True, f"Correctly returned 401: {data}")
+                return True
+            else:
+                log_test("Media trailer endpoint without auth", False, f"Wrong error message. Got: {data}")
+                return False
+        else:
+            log_test("Media trailer endpoint without auth", False, f"Expected 401, got {response.status_code}")
+            return False
+            
+    except Exception as e:
+        log_test("Media trailer endpoint without auth", False, f"Exception: {str(e)}")
+        return False
+
+def test_media_collection_without_auth():
+    """Test GET /api/media/collection without authentication - should return 401"""
+    try:
+        url = f"{BASE_URL}/media/collection"
+        print(f"Testing: GET {url} (without auth)")
+        
+        response = requests.get(url, timeout=10)
+        print(f"Status Code: {response.status_code}")
+        print(f"Response: {response.text[:200]}")
+        
+        if response.status_code == 401:
+            data = response.json()
+            if 'error' in data and 'authentif' in data['error'].lower():
+                log_test("Media collection endpoint without auth", True, f"Correctly returned 401: {data}")
+                return True
+            else:
+                log_test("Media collection endpoint without auth", False, f"Wrong error message. Got: {data}")
+                return False
+        else:
+            log_test("Media collection endpoint without auth", False, f"Expected 401, got {response.status_code}")
+            return False
+            
+    except Exception as e:
+        log_test("Media collection endpoint without auth", False, f"Exception: {str(e)}")
+        return False
+
 def run_comprehensive_backend_tests():
     """Run all backend API tests in sequence"""
     print("=" * 80)
