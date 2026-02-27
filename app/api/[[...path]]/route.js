@@ -1048,6 +1048,258 @@ async function handleProxyStream(req) {
 }
 
 /* =================================================================
+   SERIES - Seasons & Episodes from Jellyfin
+   ================================================================= */
+
+/** Get all seasons for a series */
+async function handleMediaSeasons(req) {
+  try {
+    const session = await getSession(req);
+    if (!session) return jsonResponse({ error: 'Non authentifie' }, 401);
+    const config = await getConfig();
+    const url = new URL(req.url);
+    const seriesId = url.searchParams.get('seriesId');
+    if (!seriesId) return jsonResponse({ error: 'seriesId requis' }, 400);
+
+    const res = await fetch(
+      `${config.jellyfinUrl}/Shows/${seriesId}/Seasons?UserId=${session.jellyfinUserId}&Fields=Overview,ItemCounts`,
+      { headers: { 'X-Emby-Token': session.jellyfinToken }, signal: AbortSignal.timeout(10000) }
+    );
+    if (!res.ok) throw new Error(`Jellyfin ${res.status}`);
+    const data = await res.json();
+    const seasons = (data.Items || []).map(s => ({
+      id: s.Id,
+      name: s.Name,
+      seasonNumber: s.IndexNumber || 0,
+      episodeCount: s.ChildCount || 0,
+      overview: s.Overview || '',
+      posterUrl: `/api/proxy/image?itemId=${s.Id}&type=Primary&maxWidth=400`,
+      premiereDate: s.PremiereDate || '',
+      year: s.ProductionYear || '',
+    }));
+    return jsonResponse({ seasons });
+  } catch (err) {
+    return jsonResponse({ seasons: [], error: err.message }, 500);
+  }
+}
+
+/** Get episodes for a specific season */
+async function handleMediaEpisodes(req) {
+  try {
+    const session = await getSession(req);
+    if (!session) return jsonResponse({ error: 'Non authentifie' }, 401);
+    const config = await getConfig();
+    const url = new URL(req.url);
+    const seriesId = url.searchParams.get('seriesId');
+    const seasonId = url.searchParams.get('seasonId');
+    if (!seriesId) return jsonResponse({ error: 'seriesId requis' }, 400);
+
+    let endpoint = `${config.jellyfinUrl}/Shows/${seriesId}/Episodes?UserId=${session.jellyfinUserId}&Fields=Overview,MediaSources,RunTimeTicks`;
+    if (seasonId) endpoint += `&SeasonId=${seasonId}`;
+
+    const res = await fetch(endpoint, {
+      headers: { 'X-Emby-Token': session.jellyfinToken },
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!res.ok) throw new Error(`Jellyfin ${res.status}`);
+    const data = await res.json();
+
+    const episodes = (data.Items || []).map(ep => ({
+      id: ep.Id,
+      name: ep.Name,
+      episodeNumber: ep.IndexNumber || 0,
+      seasonNumber: ep.ParentIndexNumber || 0,
+      overview: ep.Overview || '',
+      runtime: ep.RunTimeTicks ? Math.round(ep.RunTimeTicks / 600000000) : 0,
+      thumbUrl: `/api/proxy/image?itemId=${ep.Id}&type=Primary&maxWidth=400`,
+      backdropUrl: `/api/proxy/image?itemId=${ep.Id}&type=Backdrop&maxWidth=800`,
+      isPlayed: ep.UserData?.Played || false,
+      playbackPositionTicks: ep.UserData?.PlaybackPositionTicks || 0,
+      communityRating: ep.CommunityRating || 0,
+      premiereDate: ep.PremiereDate || '',
+      hasMediaSources: (ep.MediaSources || []).length > 0,
+    }));
+
+    return jsonResponse({ episodes });
+  } catch (err) {
+    return jsonResponse({ episodes: [], error: err.message }, 500);
+  }
+}
+
+/* =================================================================
+   TRAILERS - From Jellyfin RemoteTrailers or TMDB
+   ================================================================= */
+
+async function handleMediaTrailer(req) {
+  try {
+    const session = await getSession(req);
+    if (!session) return jsonResponse({ error: 'Non authentifie' }, 401);
+    const config = await getConfig();
+    const url = new URL(req.url);
+    const itemId = url.searchParams.get('id');
+    const tmdbId = url.searchParams.get('tmdbId');
+    const mediaType = url.searchParams.get('mediaType') || 'movie';
+
+    let trailers = [];
+
+    // Try Jellyfin RemoteTrailers first
+    if (itemId) {
+      try {
+        const res = await fetch(
+          `${config.jellyfinUrl}/Users/${session.jellyfinUserId}/Items/${itemId}?Fields=RemoteTrailers`,
+          { headers: { 'X-Emby-Token': session.jellyfinToken }, signal: AbortSignal.timeout(8000) }
+        );
+        if (res.ok) {
+          const item = await res.json();
+          (item.RemoteTrailers || []).forEach(t => {
+            trailers.push({ name: t.Name || 'Bande-annonce', url: t.Url, source: 'jellyfin' });
+          });
+        }
+      } catch (e) { /* ignore */ }
+    }
+
+    // Try Jellyseerr/TMDB if no trailers found and we have tmdbId
+    if (trailers.length === 0 && tmdbId && config.jellyseerrUrl) {
+      try {
+        const endpoint = mediaType === 'tv' ? 'tv' : 'movie';
+        const res = await fetch(
+          `${config.jellyseerrUrl}/api/v1/${endpoint}/${tmdbId}`,
+          { headers: { 'X-Api-Key': config.jellyseerrApiKey }, signal: AbortSignal.timeout(8000) }
+        );
+        if (res.ok) {
+          const data = await res.json();
+          const videos = data.relatedVideos || [];
+          videos.filter(v => v.type === 'Trailer' || v.type === 'Teaser').forEach(v => {
+            const ytUrl = v.site === 'YouTube' ? `https://www.youtube.com/watch?v=${v.key}` : v.url;
+            trailers.push({ name: v.name || 'Bande-annonce', url: ytUrl, key: v.key, site: v.site, source: 'tmdb' });
+          });
+        }
+      } catch (e) { /* ignore */ }
+    }
+
+    return jsonResponse({ trailers });
+  } catch (err) {
+    return jsonResponse({ trailers: [], error: err.message }, 500);
+  }
+}
+
+/* =================================================================
+   COLLECTIONS / SAGAS - Movie collections from Jellyfin
+   ================================================================= */
+
+async function handleMediaCollection(req) {
+  try {
+    const session = await getSession(req);
+    if (!session) return jsonResponse({ error: 'Non authentifie' }, 401);
+    const config = await getConfig();
+    const url = new URL(req.url);
+    const itemId = url.searchParams.get('id');
+    const tmdbId = url.searchParams.get('tmdbId');
+
+    let collection = null;
+    let items = [];
+
+    // Check Jellyfin for BoxSet (collection)
+    if (itemId) {
+      try {
+        // First get the item to check if it belongs to a collection
+        const itemRes = await fetch(
+          `${config.jellyfinUrl}/Users/${session.jellyfinUserId}/Items/${itemId}?Fields=ProviderIds`,
+          { headers: { 'X-Emby-Token': session.jellyfinToken }, signal: AbortSignal.timeout(8000) }
+        );
+        if (itemRes.ok) {
+          const item = await itemRes.json();
+          // Search for BoxSets containing this item's name or from same collection
+          const boxSetRes = await fetch(
+            `${config.jellyfinUrl}/Users/${session.jellyfinUserId}/Items?IncludeItemTypes=BoxSet&Recursive=true&Fields=Overview,ChildCount`,
+            { headers: { 'X-Emby-Token': session.jellyfinToken }, signal: AbortSignal.timeout(8000) }
+          );
+          if (boxSetRes.ok) {
+            const boxSets = await boxSetRes.json();
+            // Find a BoxSet that might contain this movie
+            for (const bs of (boxSets.Items || [])) {
+              const childrenRes = await fetch(
+                `${config.jellyfinUrl}/Users/${session.jellyfinUserId}/Items?ParentId=${bs.Id}&Fields=Overview,CommunityRating,PremiereDate`,
+                { headers: { 'X-Emby-Token': session.jellyfinToken }, signal: AbortSignal.timeout(8000) }
+              );
+              if (childrenRes.ok) {
+                const children = await childrenRes.json();
+                const isInCollection = (children.Items || []).some(c => c.Id === itemId);
+                if (isInCollection) {
+                  collection = { id: bs.Id, name: bs.Name, overview: bs.Overview || '' };
+                  items = (children.Items || []).map(c => ({
+                    id: c.Id,
+                    name: c.Name,
+                    year: c.ProductionYear || '',
+                    overview: c.Overview || '',
+                    posterUrl: `/api/proxy/image?itemId=${c.Id}&type=Primary&maxWidth=300`,
+                    communityRating: c.CommunityRating || 0,
+                    isCurrent: c.Id === itemId,
+                  }));
+                  break;
+                }
+              }
+            }
+          }
+        }
+      } catch (e) { /* ignore collection search errors */ }
+    }
+
+    // Try TMDB collection via Jellyseerr
+    if (!collection && tmdbId && config.jellyseerrUrl) {
+      try {
+        const res = await fetch(
+          `${config.jellyseerrUrl}/api/v1/movie/${tmdbId}`,
+          { headers: { 'X-Api-Key': config.jellyseerrApiKey }, signal: AbortSignal.timeout(8000) }
+        );
+        if (res.ok) {
+          const data = await res.json();
+          if (data.collection) {
+            collection = {
+              id: data.collection.id,
+              name: data.collection.name,
+              overview: data.collection.overview || '',
+              posterUrl: data.collection.posterPath
+                ? `/api/proxy/tmdb?path=${data.collection.posterPath}&width=w400`
+                : '',
+              backdropUrl: data.collection.backdropPath
+                ? `/api/proxy/tmdb?path=${data.collection.backdropPath}&width=w1280`
+                : '',
+            };
+            // Fetch collection parts
+            if (data.collection.id) {
+              try {
+                const collRes = await fetch(
+                  `${config.jellyseerrUrl}/api/v1/collection/${data.collection.id}`,
+                  { headers: { 'X-Api-Key': config.jellyseerrApiKey }, signal: AbortSignal.timeout(8000) }
+                );
+                if (collRes.ok) {
+                  const collData = await collRes.json();
+                  items = (collData.parts || []).map(p => ({
+                    id: p.id,
+                    tmdbId: p.id,
+                    name: p.title || p.name || '',
+                    year: (p.releaseDate || '').substring(0, 4),
+                    overview: p.overview || '',
+                    posterUrl: p.posterPath ? `/api/proxy/tmdb?path=${p.posterPath}&width=w300` : '',
+                    communityRating: p.voteAverage || 0,
+                    isCurrent: String(p.id) === String(tmdbId),
+                  }));
+                }
+              } catch (e) { /* ignore */ }
+            }
+          }
+        }
+      } catch (e) { /* ignore */ }
+    }
+
+    return jsonResponse({ collection, items });
+  } catch (err) {
+    return jsonResponse({ collection: null, items: [], error: err.message }, 500);
+  }
+}
+
+/* =================================================================
    MAIN ROUTE HANDLER
    All /api/* requests are routed here via the catch-all pattern
    ================================================================= */
